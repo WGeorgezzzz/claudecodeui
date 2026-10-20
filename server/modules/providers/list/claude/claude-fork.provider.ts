@@ -1,5 +1,7 @@
 import { stat } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 
 import { forkSession as forkClaudeSession } from '@anthropic-ai/claude-agent-sdk';
 
@@ -15,6 +17,19 @@ import { AppError } from '@/shared/utils.js';
  * file. `upToMessageId` is inclusive of the row it names.
  */
 export class ClaudeForkProvider implements IProviderFork {
+  /** Sessions service uses the last completed top-level reply, never an in-flight tool request. */
+  async getCompletedAnchor(jsonlPath: string): Promise<string|null> {
+    let anchor: string|null=null;
+    const lines=createInterface({input:createReadStream(jsonlPath,{encoding:'utf8'}),crlfDelay:Infinity});
+    for await (const line of lines) {
+      try {
+        const row=JSON.parse(line);
+        if (row.type==='assistant' && !row.isSidechain && !row.parent_tool_use_id
+          && row.message?.stop_reason==='end_turn' && typeof row.uuid==='string') anchor=row.uuid;
+      } catch { /* A concurrent append may leave a partial final JSON line. */ }
+    }
+    return anchor;
+  }
   async forkSession(input: {
     providerSessionId: string;
     jsonlPath: string;

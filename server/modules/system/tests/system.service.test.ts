@@ -21,6 +21,18 @@ function createDependencies(
   };
 }
 
+test('Workbench refuses upstream updates without running a command',async()=>{
+  let invoked=false;
+  const service=createSystemUpdateService(createDependencies({
+    environment:{CLOUDCLI_DISTRIBUTION:'workbench'},
+    runShellCommand:async()=>{invoked=true;return {exitCode:0,output:'',errorOutput:''};},
+  }));
+  const outcome=await service.updateSystem();
+  assert.equal(outcome.success,false);
+  assert.equal(invoked,false);
+  assert.match('error' in outcome?outcome.error||'':'',/independent installer/);
+});
+
 test('git installations update from the application root', async () => {
   const calls: unknown[][] = [];
   const dependencies = createDependencies({

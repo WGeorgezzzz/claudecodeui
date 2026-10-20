@@ -70,7 +70,7 @@ window.__MOCK_STATE__ = {
     },
     updateSetting: function (key, value) {
       mockState.desktopSettings = mockState.desktopSettings || {};
-      mockState.desktopSettings[key] = key === 'themeMode' ? value : !!value;
+      mockState.desktopSettings[key] = ['themeMode','claudeConfigDir','claudeCliPath'].includes(key) ? value : !!value;
       return Promise.resolve(clone(mockState));
     },
     openEnvironment: function (id) {
@@ -478,6 +478,13 @@ window.__MOCK_STATE__ = {
         '<label class="cc-toggle"><input type="checkbox" data-cc-setting="exposeLocalServerOnNetwork"' + ((state.desktopSettings || {}).exposeLocalServerOnNetwork ? ' checked' : '') + '><span><b>Allow LAN access</b><br>Use the copied URL from another device on this network.</span></label>' +
         '</div>'
       ),
+      state.distribution === 'workbench' ? CC.renderSection('CLAUDE PROFILE', 'Optional existing CLI configuration', '' +
+        '<div class="cc-surface" style="padding:16px">' +
+        '<p>Leave blank for the isolated Workbench profile. Changes apply to the next service start; running work is not restarted.</p>' +
+        '<label>Configuration directory<input type="text" data-cc-setting="claudeConfigDir" value="' + esc((state.desktopSettings || {}).claudeConfigDir || '') + '" placeholder="Absolute directory (optional)" style="display:block;width:100%;margin:8px 0;padding:8px"></label>' +
+        '<label>CLI executable or wrapper<input type="text" data-cc-setting="claudeCliPath" value="' + esc((state.desktopSettings || {}).claudeCliPath || '') + '" placeholder="Absolute executable or .js wrapper (optional)" style="display:block;width:100%;margin:8px 0;padding:8px"></label>' +
+        '</div>'
+      ) : '',
     ];
     CC.renderSheet('Local Settings', 'Manage how Local CloudCLI runs on this computer.', sections);
   };
@@ -539,7 +546,7 @@ window.__MOCK_STATE__ = {
       if (setting) {
         CC.act('set-setting', {
           key: setting.getAttribute('data-cc-setting'),
-          value: setting.checked,
+          value: setting.type === 'checkbox' ? setting.checked : setting.value.trim(),
         });
         return;
       }

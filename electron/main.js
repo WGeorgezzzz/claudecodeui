@@ -8,12 +8,21 @@ import { DesktopWindowManager } from './desktopWindow.js';
 import { DesktopNotificationsController } from './desktopNotifications.js';
 import { LocalServerController } from './localServer.js';
 import { TabsController } from './tabs.js';
+import { loadWorkbenchProfile } from './workbenchProfile.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const APP_NAME = 'CloudCLI';
-const APP_USER_MODEL_ID = 'ai.cloudcli.desktop';
-const CALLBACK_PROTOCOL = 'cloudcli';
+const workbenchProfile = loadWorkbenchProfile(app.getAppPath());
+const APP_NAME = workbenchProfile?.productName || 'CloudCLI';
+const APP_USER_MODEL_ID = workbenchProfile?.appId || 'ai.cloudcli.desktop';
+const CALLBACK_PROTOCOL = workbenchProfile?.protocol || 'cloudcli';
+if (workbenchProfile) {
+  app.setName(APP_NAME);
+  // Separate single-instance lock, settings, browser partitions and cookies.
+  const explicitProfile=process.env.WORKBENCH_USER_DATA_DIR;
+  if (explicitProfile && !path.isAbsolute(explicitProfile)) throw new Error('WORKBENCH_USER_DATA_DIR must be absolute.');
+  app.setPath('userData',explicitProfile || path.join(app.getPath('appData'),workbenchProfile.storageFolder));
+}
 const CALLBACK_URL = `${CALLBACK_PROTOCOL}://auth/callback`;
 const CLOUDCLI_CONTROL_PLANE_URL = process.env.CLOUDCLI_CONTROL_PLANE_URL || 'https://cloudcli.ai';
 const REMOTE_START_TIMEOUT_MS = 30000;
@@ -112,6 +121,7 @@ function getDesktopState() {
   const localState = getLocalState();
   const authState = cloud.getAuthState();
   return {
+    distribution: workbenchProfile ? 'workbench' : 'cloudcli',
     account: {
       connected: authState === 'connected',
       email: cloudAccount?.email || null,
@@ -908,6 +918,8 @@ async function bootstrap() {
   });
 
   localServer = new LocalServerController({
+    workbenchProfile,
+    userDataPath: app.getPath('userData'),
     appRoot: getAppRoot(),
     settingsPath: getSettingsPath(),
     isPackaged: app.isPackaged,
@@ -942,7 +954,7 @@ async function bootstrap() {
   registerIpcHandlers();
   registerAppEvents();
   await createDesktopWindow();
-  if (process.argv.includes('--local')) {
+  if (workbenchProfile || process.argv.includes('--local')) {
     // Show the window immediately and let the local tab display startup progress/errors.
     void openLocalInDesktop().catch((error) => showError('本地 CloudCLI 启动失败', error));
   }

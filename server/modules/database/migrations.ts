@@ -1,5 +1,7 @@
 import { Database } from 'better-sqlite3';
 import { initializeMonitorTables } from '@/modules/database/repositories/monitors.db.js';
+import { initializeSideChatTables } from '@/modules/database/repositories/side-chats.db.js';
+import { initializeMessageQueueTables } from '@/modules/database/repositories/message-queue.db.js';
 
 import {
   APP_CONFIG_TABLE_SCHEMA_SQL,
@@ -541,6 +543,8 @@ export const runMigrations = (db: Database) => {
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
     initializeMonitorTables(db);
+    initializeSideChatTables(db);
+    initializeMessageQueueTables(db);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_provider_session_id ON sessions(provider_session_id)');

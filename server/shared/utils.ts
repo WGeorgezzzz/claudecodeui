@@ -1371,3 +1371,21 @@ export function getClaudeConfigFile(): string {
     ? path.join(getClaudeConfigDir(), '.claude.json')
     : path.join(os.homedir(), '.claude.json');
 }
+
+/** Side Chats and Message Queue routes use the authenticated identity, never a body-supplied owner.
+ * Reject missing or malformed IDs before any per-user persistence operation. */
+export function requireAuthenticatedUserId(request: Request): number {
+  const value=(request as Request & {user?:{id?:unknown}}).user?.id;
+  const id=Number(value);
+  if (value==null || !Number.isSafeInteger(id) || id<1) {
+    throw new AppError('Authentication is required.',{code:'USER_REQUIRED',statusCode:401});
+  }
+  return id;
+}
+
+/** Assets, browser profiles, plugins and server discovery share this owned application-data root.
+ * Workbench supplies an absolute directory; ordinary CloudCLI keeps its existing home-directory default. */
+export function getCloudCliHomeDir(): string {
+  const override=process.env.CLOUDCLI_HOME?.trim();
+  return override && path.isAbsolute(override)?override:path.join(os.homedir(),'.cloudcli');
+}

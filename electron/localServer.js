@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
+import { mkdirSync, openSync, closeSync, existsSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
 import { ServerInstaller } from './serverInstaller.js';
+import { buildWorkbenchServerEnvironment, ensureWorkbenchIdentity } from './workbenchProfile.js';
 
 const DEFAULT_PORT = 3001;
 const HOST = '127.0.0.1';
@@ -88,9 +90,9 @@ function getFreePort() {
   });
 }
 
-async function chooseServerPort(host) {
-  if (await isPortAvailable(DEFAULT_PORT, host)) {
-    return DEFAULT_PORT;
+async function chooseServerPort(host, preferredPort = DEFAULT_PORT) {
+  if (await isPortAvailable(preferredPort, host)) {
+    return preferredPort;
   }
 
   return getFreePort();
@@ -246,20 +248,25 @@ async function waitForCloudCliServer(baseUrl, timeoutMs) {
 }
 
 export class LocalServerController {
-  constructor({ appRoot, settingsPath, isPackaged = false, appVersion, onChange }) {
+  constructor({ appRoot, settingsPath, isPackaged = false, appVersion, onChange, workbenchProfile = null, userDataPath = null }) {
     this.appRoot = appRoot;
     this.settingsPath = settingsPath;
     this.isPackaged = isPackaged;
     this.appVersion = appVersion;
     this.onChange = onChange;
+    this.workbenchProfile = workbenchProfile;
+    this.userDataPath = userDataPath || path.dirname(settingsPath);
+    this.instanceId = null;
     this.localServerUrl = null;
     this.localServerPort = null;
     this.ownedServerProcess = null;
     this.startupLogs = [];
     this.desktopSettings = {
-      keepLocalServerRunning: false,
+      keepLocalServerRunning: Boolean(workbenchProfile),
       exposeLocalServerOnNetwork: false,
       themeMode: 'system',
+      claudeConfigDir: '',
+      claudeCliPath: '',
     };
   }
 
@@ -294,8 +301,8 @@ export class LocalServerController {
   getPendingTarget() {
     return {
       kind: 'local',
-      name: 'Local CloudCLI',
-      url: this.localServerUrl || `http://${DISPLAY_HOST}:${this.localServerPort || DEFAULT_PORT}`,
+      name: this.workbenchProfile ? 'Local Workbench' : 'Local CloudCLI',
+      url: this.localServerUrl || `http://${DISPLAY_HOST}:${this.localServerPort || this.workbenchProfile?.defaultPort || DEFAULT_PORT}`,
     };
   }
 
@@ -327,6 +334,7 @@ export class LocalServerController {
   }
 
   async loadDesktopSettings() {
+    if (this.workbenchProfile) this.instanceId=await ensureWorkbenchIdentity(this.userDataPath);
     try {
       const raw = await fs.readFile(this.settingsPath, 'utf8');
       const stored = JSON.parse(raw);
@@ -334,12 +342,16 @@ export class LocalServerController {
         keepLocalServerRunning: Boolean(stored.keepLocalServerRunning),
         exposeLocalServerOnNetwork: Boolean(stored.exposeLocalServerOnNetwork),
         themeMode: stored.themeMode === 'light' || stored.themeMode === 'dark' ? stored.themeMode : 'system',
+        claudeConfigDir: typeof stored.claudeConfigDir==='string' && path.isAbsolute(stored.claudeConfigDir) ? stored.claudeConfigDir : '',
+        claudeCliPath: typeof stored.claudeCliPath==='string' && path.isAbsolute(stored.claudeCliPath) ? stored.claudeCliPath : '',
       };
     } catch {
       this.desktopSettings = {
-        keepLocalServerRunning: false,
+        keepLocalServerRunning: Boolean(this.workbenchProfile),
         exposeLocalServerOnNetwork: false,
         themeMode: 'system',
+        claudeConfigDir: '',
+        claudeCliPath: '',
       };
     }
   }
@@ -349,6 +361,8 @@ export class LocalServerController {
       keepLocalServerRunning: Boolean(nextSettings.keepLocalServerRunning),
       exposeLocalServerOnNetwork: Boolean(nextSettings.exposeLocalServerOnNetwork),
       themeMode: nextSettings.themeMode === 'light' || nextSettings.themeMode === 'dark' ? nextSettings.themeMode : 'system',
+      claudeConfigDir: nextSettings.claudeConfigDir || '',
+      claudeCliPath: nextSettings.claudeCliPath || '',
     };
     await fs.mkdir(path.dirname(this.settingsPath), { recursive: true });
     await fs.writeFile(this.settingsPath, JSON.stringify(this.desktopSettings, null, 2), 'utf8');
@@ -360,9 +374,11 @@ export class LocalServerController {
       throw new Error(`Unknown desktop setting: ${key}`);
     }
 
-    const wasExposeSetting = key === 'exposeLocalServerOnNetwork';
+    const isProviderPath = key==='claudeConfigDir' || key==='claudeCliPath';
+    if (isProviderPath && value && (typeof value!=='string' || !path.isAbsolute(value))) throw new Error('Provider paths must be absolute.');
+    const wasExposeSetting = key === 'exposeLocalServerOnNetwork' || isProviderPath;
     const wasLocalRunning = Boolean(this.localServerUrl);
-    const nextValue = key === 'themeMode' ? value : Boolean(value);
+    const nextValue = key === 'themeMode' || isProviderPath ? value : Boolean(value);
     await this.saveDesktopSettings({ ...this.desktopSettings, [key]: nextValue });
 
     return {
@@ -373,6 +389,13 @@ export class LocalServerController {
 
   /** Resolves the local server entry, installing the matching runtime if needed. */
   async resolveServerEntry() {
+    if (this.workbenchProfile) {
+      const bundled=path.join(this.appRoot,'server','dist-server','server','index.js');
+      const development=path.join(this.appRoot,'dist-server','server','index.js');
+      if (await pathExists(bundled)) return bundled;
+      if (!this.isPackaged && await pathExists(development)) return development;
+      throw new Error('The Workbench server bundle is missing. Reinstall the Workbench package; upstream runtimes are not substituted.');
+    }
     if (process.env.ELECTRON_SERVER_ENTRY) {
       return process.env.ELECTRON_SERVER_ENTRY;
     }
@@ -396,28 +419,46 @@ export class LocalServerController {
 
   startBundledServer(port, serverEntry) {
     const bindHost = this.getServerBindHost();
-    const runtime = getNodeRuntime(this.isPackaged);
+    const runtime = this.workbenchProfile
+      ? {command:this.isPackaged?path.join(this.appRoot,'runtime',process.platform==='win32'?'node.exe':'node'):(process.env.npm_node_execpath||'node'),env:{},label:'Workbench isolated Node runtime'}
+      : getNodeRuntime(this.isPackaged);
     const serverCwd = getServerCwd(this.appRoot, serverEntry);
+    const nativeClaude=path.join(this.appRoot,'node_modules','@anthropic-ai',
+      `claude-agent-sdk-${process.platform}-${process.arch}`,process.platform==='win32'?'claude.exe':'claude');
+    if (this.workbenchProfile && this.isPackaged && !existsSync(nativeClaude)) throw new Error('Bundled Claude runtime is missing. Reinstall Workbench.');
 
     const command = `${runtime.command} ${serverEntry}`;
     this.appendStartupLog(`$ ${command}`);
     this.appendStartupLog(`runtime: ${runtime.label}`);
     this.appendStartupLog(`cwd: ${serverCwd}`);
     this.appendStartupLog(`HOST=${bindHost} SERVER_PORT=${port}`);
+    // A detached Workbench server must not depend on the GUI's stdout pipes.
+    // Its owned log files remain writable after the desktop app exits.
+    const logHandles=[];
+    if (this.workbenchProfile) {
+      const directory=path.join(this.userDataPath,'logs');
+      mkdirSync(directory,{recursive:true});
+      logHandles.push(openSync(path.join(directory,'server.log'),'a'),openSync(path.join(directory,'server-error.log'),'a'));
+    }
 
     this.ownedServerProcess = spawn(runtime.command, [serverEntry], {
       cwd: serverCwd,
       detached: true,
-      env: {
+      env: this.workbenchProfile ? buildWorkbenchServerEnvironment({
+        userDataPath:this.userDataPath,instanceId:this.instanceId,port,settings:this.desktopSettings,
+        bundledClaudePath:existsSync(nativeClaude)?nativeClaude:undefined,
+        runtimeDirectory:this.isPackaged?path.join(this.appRoot,'runtime'):undefined,
+      }) : {
         ...process.env,
         ...runtime.env,
         HOST: bindHost,
         SERVER_PORT: String(port),
         PATH: getDesktopPath(),
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: this.workbenchProfile?['ignore',...logHandles]:['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
+    for (const handle of logHandles) closeSync(handle);
 
     this.ownedServerProcess.once('error', (error) => {
       this.appendStartupLog(`failed to start process: ${error.message}`);
@@ -446,6 +487,7 @@ export class LocalServerController {
   }
 
   async resolveLocalServerUrl() {
+    if (this.workbenchProfile) return this.resolveWorkbenchServerUrl();
     const defaultUrl = `http://${HOST}:${DEFAULT_PORT}`;
     const defaultDisplayUrl = `http://${DISPLAY_HOST}:${DEFAULT_PORT}`;
     const devUrl = process.env.ELECTRON_DEV_URL;
@@ -499,7 +541,7 @@ export class LocalServerController {
   async ensureLocalServer() {
     if (this.startupPromise) return this.startupPromise;
     this.startupPromise = (async () => {
-      if (!this.localServerUrl || !await isCloudCliServer(this.localServerUrl)) {
+      if (!this.localServerUrl || !(this.workbenchProfile ? await this.isWorkbenchServer(this.localServerUrl) : await isCloudCliServer(this.localServerUrl))) {
         this.localServerUrl = await this.resolveLocalServerUrl();
       }
       return this.localServerUrl;
@@ -508,11 +550,51 @@ export class LocalServerController {
     finally { this.startupPromise = null; }
   }
 
+  async isWorkbenchServer(url) {
+    try {
+      const parsed=new URL(url);
+      if (!['127.0.0.1','localhost'].includes(parsed.hostname) || parsed.protocol!=='http:') return false;
+      const health=await requestJson(`${url}/health`);
+      return health.ok && health.json?.status==='ok' && health.json?.distribution==='workbench'
+        && health.json?.instanceId===this.instanceId;
+    } catch { return false; }
+  }
+
+  async resolveWorkbenchServerUrl() {
+    this.instanceId ||= await ensureWorkbenchIdentity(this.userDataPath);
+    // Only this installation's marker can nominate an existing service.
+    const marker=path.join(this.userDataPath,'server','local-server.json');
+    try {
+      const stored=JSON.parse(await fs.readFile(marker,'utf8'));
+      const url=`http://${HOST}:${Number(stored.port)}`;
+      if (await this.isWorkbenchServer(url)) {
+        this.localServerPort=Number(stored.port);
+        this.appendStartupLog(`Reusing this Workbench installation at ${url}`);
+        return url;
+      }
+    } catch { /* Missing or stale owned marker: choose a free port without touching another server. */ }
+    const entry=await this.resolveServerEntry();
+    const port=await chooseServerPort(this.getServerBindHost(),this.workbenchProfile.defaultPort);
+    this.localServerPort=port;
+    const url=`http://${HOST}:${port}`;
+    this.startBundledServer(port,entry);
+    const started=Date.now();
+    while (Date.now()-started<SERVER_START_TIMEOUT_MS) {
+      if (await this.isWorkbenchServer(url)) {
+        this.appendStartupLog(`Workbench ready at ${url}`);
+        return url;
+      }
+      await new Promise(resolve=>setTimeout(resolve,300));
+    }
+    await this.shutdownOwnedServer();
+    throw new Error('Workbench did not become ready. Check its local startup log.');
+  }
+
   async getResolvedTarget() {
     await this.ensureLocalServer();
     return {
       kind: 'local',
-      name: 'Local CloudCLI',
+      name: this.workbenchProfile ? 'Local Workbench' : 'Local CloudCLI',
       url: this.localServerUrl,
     };
   }

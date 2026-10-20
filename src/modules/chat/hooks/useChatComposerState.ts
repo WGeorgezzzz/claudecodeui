@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, QueueSubmission, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -33,6 +33,7 @@ import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
 
 type UseChatComposerStateArgs = {
+  enqueueMessage?: (submission:QueueSubmission,sessionId:string)=>Promise<void>;
   onOpenSideChat?: (prompt?: string) => void;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -89,6 +90,7 @@ type CommandExecutionResult = {
 
 
 type SubmitOptions = {
+  forceQueue?: boolean;
   /**
    * Send the text as a chat message even when it starts with "/" (or is
    * "help"). Set only for the re-submit of a custom command's expanded body:
@@ -179,6 +181,7 @@ const getNotificationSessionSummary = (
 const SAFARI_IME_RACE_WINDOW_MS = 30;
 
 export function useChatComposerState({
+  enqueueMessage,
   onOpenSideChat,
   selectedProject,
   selectedSession,
@@ -717,8 +720,17 @@ export function useChatComposerState({
   // card. Used while a turn is in flight and when the user chooses to queue
   // behind background work. Attachments must already be uploaded.
   const queueMessage = useCallback(
-    (durableDraft: QueuedDraft, queuedSessionKey: string | null) => {
-      if (queuedSessionKey) {
+    async (durableDraft: QueuedDraft, queuedSessionKey: string | null) => {
+      if (enqueueMessage) {
+        if (!queuedSessionKey) return;
+        try {
+          await enqueueMessage({content:durableDraft.content,options:{...durableDraft.options},
+            attachments:durableDraft.uploadedAttachments??[]},queuedSessionKey);
+        } catch (error) {
+          addMessage({type:'error',content:error instanceof Error?error.message:String(error),timestamp:new Date()});
+          return;
+        }
+      } else if (queuedSessionKey) {
         // Write the claim ticket synchronously after upload; this closes the
         // gap before React's persistence effect runs.
         writeQueuedMessage(queuedSessionKey, {
@@ -731,7 +743,9 @@ export function useChatComposerState({
       // Recorded under the session the message was queued FOR, and before
       // the session-switch return below — the queued text must be
       // recallable even when it dispatches without this composer.
+      const inputUnchanged=inputValueRef.current===durableDraft.content;
       recordSentMessage(durableDraft.content, queuedSessionKey);
+      if (queuedSessionKey && readDraftText(queuedSessionKey)===durableDraft.content) writeDraftText(queuedSessionKey,'');
 
       // The server owns dispatch after persistence. If the user changed
       // sessions during upload, the durable record is already enough; do
@@ -740,8 +754,12 @@ export function useChatComposerState({
         return;
       }
 
-      queuedDraftSessionRef.current = queuedSessionKey;
-      setQueuedDraft(durableDraft);
+      if (!enqueueMessage) {
+        queuedDraftSessionRef.current = queuedSessionKey;
+        setQueuedDraft(durableDraft);
+      }
+      // Do not erase text typed while the server was acknowledging this queue entry.
+      if (!inputUnchanged) return;
       setInput('');
       inputValueRef.current = '';
       setAttachedFiles([]);
@@ -755,7 +773,7 @@ export function useChatComposerState({
         writeDraftText(draftScopeRef.current, '');
       }
     },
-    [recordSentMessage, resetCommandMenuState, setInput],
+    [recordSentMessage, resetCommandMenuState, setInput, enqueueMessage, addMessage],
   );
 
   const submitMessage = useCallback(
@@ -792,7 +810,7 @@ export function useChatComposerState({
       // A turn is already in flight: stash this message instead of sending it.
       // Upload attached files now so the queued record contains durable image
       // descriptors that can be sent even if another session is open later.
-      if (isLoading) {
+      if (isLoading || submitOptions?.forceQueue) {
         // A run can restart in the tiny gap between scheduling and flushing a
         // queued submission. Put the same durable draft back without uploading
         // its files again.
@@ -818,7 +836,7 @@ export function useChatComposerState({
           return;
         }
 
-        queueMessage({
+        await queueMessage({
           content: currentInput,
           attachments: currentAttachments,
           uploadedAttachments,
@@ -955,7 +973,7 @@ export function useChatComposerState({
             return;
           }
           // Attachments were uploaded above; queue the same descriptors.
-          queueMessage({
+          await queueMessage({
             content: currentInput,
             attachments: currentAttachments,
             uploadedAttachments,

@@ -346,12 +346,49 @@
     "open": "打开侧边对话",
     "close": "关闭侧边对话",
     "openFull": "作为主对话打开",
-    "context": "带入打开时的主对话上下文，消息独立保存。项目文件仍共享。",
+    "context": "从主对话最近一次已完成的回复分支，消息独立保存。项目文件仍共享。",
     "loading": "正在准备对话上下文…",
     "failed": "暂时无法打开侧边对话，请确认主对话已有保存的历史。",
     "retry": "重试",
     "returnReply": "将最新回答放入主对话草稿",
     "replyPrefix": "侧边讨论的结论：",
-    "selectedContext": "关于这段内容："
+    "selectedContext": "关于这段内容：",
+    "defaultName": "侧边会话 {{number}}",
+    "choose": "选择侧边会话",
+    "new": "新建侧边会话",
+    "rename": "重命名侧边会话",
+    "archive": "归档侧边会话",
+    "restore": "恢复侧边会话",
+    "save": "保存名称",
+    "history": "已归档与历史侧边会话",
+    "noActive": "暂无活动侧边会话",
+    "showContext": "展开继承的上下文",
+    "hideContext": "折叠继承的上下文",
+    "status": {
+      "creating": "创建中",
+      "archived": "已归档",
+      "promoted": "已转为主对话",
+      "failed": "创建失败"
+    }
+  },
+  "queue": {
+    "title": "消息队列",
+    "edit": "编辑排队消息",
+    "save": "保存",
+    "cancel": "取消排队消息",
+    "retry": "重试排队消息",
+    "history": "提交记录",
+    "blocked": "后续消息已暂停，请先重试或取消这一条。",
+    "status": {
+      "queued": "等待执行",
+      "running": "执行中",
+      "succeeded": "已完成",
+      "failed": "失败",
+      "interrupted": "未确认 / 中断",
+      "cancelled": "已取消"
+    },
+    "attempts": "尝试记录",
+    "add": "加入消息队列",
+    "attachmentsOnly": "附件消息"
   }
 }

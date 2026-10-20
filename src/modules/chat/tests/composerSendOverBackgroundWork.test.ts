@@ -52,7 +52,8 @@ const backgroundOnly: SessionActivityMap = new Map([[
 
 const uploads = () => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/assets/files'));
 
-const render = (processingSessions: SessionActivityMap, provider: LLMProvider = 'cursor', onOpenSideChat?: (prompt?: string) => void, busy = false) => {
+const render = (processingSessions: SessionActivityMap, provider: LLMProvider = 'cursor', onOpenSideChat?: (prompt?: string) => void, busy = false,
+  enqueueMessage?:Parameters<typeof useChatComposerState>[0]['enqueueMessage']) => {
   const sent: Array<{ type: string }> = [];
   const view = renderHook(() =>
     useChatComposerState({
@@ -67,6 +68,7 @@ const render = (processingSessions: SessionActivityMap, provider: LLMProvider = 
       currentProviderEffort: 'medium',
       isLoading: busy,
       onOpenSideChat,
+      enqueueMessage,
       processingSessions,
       canAbortSession: false,
       tokenBudget: null,
@@ -129,6 +131,30 @@ test('/side opens a separate question while the parent is busy without queuing o
   assert.equal(sends().length,0);
   assert.equal(view.result.current.queuedDraft,null);
   assert.equal(view.result.current.input,'');
+});
+
+test('explicit durable queue submissions append separately and never use the legacy slot',async()=>{
+  const enqueue=vi.fn(async()=>{});
+  const {view,sends}=render(new Map(),'claude',undefined,false,enqueue);
+  for (const content of ['first queued','second queued']) {
+    act(()=>view.result.current.setInput(content));
+    await act(async()=>{await view.result.current.handleSubmit({preventDefault:()=>{}} as never,undefined,{forceQueue:true});});
+  }
+  assert.equal(enqueue.mock.calls.length,2);
+  assert.equal(sends().length,0);
+  assert.equal(view.result.current.queuedDraft,null);
+  assert.equal(readQueuedMessage(SESSION.id),null);
+  assert.equal(view.result.current.input,'');
+});
+
+test('a rejected durable enqueue keeps the original editable message',async()=>{
+  const enqueue=vi.fn(async()=>{throw new Error('queue offline');});
+  const {view,sends}=render(backgroundOnly,'claude',undefined,true,enqueue);
+  act(()=>view.result.current.setInput('keep this message'));
+  await act(async()=>{await startSubmit(view);});
+  assert.equal(view.result.current.input,'keep this message');
+  assert.equal(readQueuedMessage(SESSION.id),null);
+  assert.equal(sends().length,0);
 });
 
 test('sending on a session with background work asks first, naming the session\'s own tasks', async () => {

@@ -82,6 +82,9 @@ export interface IProvider {
  * Transcript-branching contract for one provider.
  */
 export interface IProviderFork {
+  /** Side-chat creation uses a completed assistant boundary so it never resumes a partial tool exchange.
+   * Providers without this capability are not eligible for automatic side-chat snapshots. */
+  getCompletedAnchor?(jsonlPath: string): Promise<string|null>;
   /**
    * Copies a session's transcript, up to and including `upToAnchorId` (the
    * whole conversation when omitted), into a brand-new provider session.

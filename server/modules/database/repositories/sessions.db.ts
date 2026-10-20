@@ -547,6 +547,7 @@ export const sessionsDb = {
     const db = getConnection();
     const visibilityClause = `
       sessions.isArchived = 0
+      AND NOT EXISTS (SELECT 1 FROM side_chats side WHERE side.child_session_id=sessions.session_id AND side.status<>'promoted')
       AND (projects.isArchived IS NULL OR projects.isArchived = 0)
     `;
     const rows = db
@@ -601,7 +602,8 @@ export const sessionsDb = {
         `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE project_path = ?
-           AND isArchived = 0`
+           AND isArchived = 0
+           AND NOT EXISTS (SELECT 1 FROM side_chats side WHERE side.child_session_id=sessions.session_id AND side.status<>'promoted')`
       )
       .all(normalizedProjectPath) as SessionRow[];
 
@@ -635,6 +637,7 @@ export const sessionsDb = {
          FROM sessions
          WHERE project_path = ?
            AND isArchived = 0
+           AND NOT EXISTS (SELECT 1 FROM side_chats side WHERE side.child_session_id=sessions.session_id AND side.status<>'promoted')
          ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
          LIMIT ? OFFSET ?`
       )
@@ -651,7 +654,8 @@ export const sessionsDb = {
         `SELECT COUNT(*) AS count
          FROM sessions
          WHERE project_path = ?
-           AND isArchived = 0`
+           AND isArchived = 0
+           AND NOT EXISTS (SELECT 1 FROM side_chats side WHERE side.child_session_id=sessions.session_id AND side.status<>'promoted')`
       )
       .get(normalizedProjectPath) as { count: number } | undefined;
 

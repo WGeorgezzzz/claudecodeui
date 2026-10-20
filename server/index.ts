@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 // Load environment variables before other imports execute.
-import { monitorsRoutes, initializeMonitors, closeMonitors } from '@/modules/monitors/index.js';
-
 import './load-env.js';
+import { monitorsRoutes, initializeMonitors, closeMonitors } from '@/modules/monitors/index.js';
+import { sideChatsRoutes } from '@/modules/side-chats/index.js';
+import { messageQueueRoutes, initializeMessageQueue, closeMessageQueue } from '@/modules/message-queue/index.js';
+import { sideChatsDb } from '@/modules/database/index.js';
+import { getCloudCliHomeDir } from '@/shared/index.js';
+
 import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
 import os from 'os';
@@ -146,7 +150,9 @@ app.get('/health', (req, res) => {
         status: 'ok',
         timestamp: new Date().toISOString(),
         installMode,
-        version: RUNNING_VERSION
+        version: RUNNING_VERSION,
+        distribution: process.env.CLOUDCLI_DISTRIBUTION || 'cloudcli',
+        instanceId: process.env.CLOUDCLI_INSTANCE_ID || null
     });
 });
 
@@ -200,6 +206,8 @@ app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 app.use('/api/providers', authenticateToken, providerRoutes);
 app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
 app.use('/api/monitors', authenticateToken, monitorsRoutes);
+app.use('/api/side-chats', authenticateToken, sideChatsRoutes);
+app.use('/api/message-queue', authenticateToken, messageQueueRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -285,7 +293,7 @@ const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
-const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.cloudcli', 'local-server.json');
+const LOCAL_SERVER_MARKER_PATH = path.join(getCloudCliHomeDir(), 'local-server.json');
 
 function getErrorCode(error: unknown): string | undefined {
     if (typeof error !== 'object' || error === null || !('code' in error)) {
@@ -376,6 +384,8 @@ async function startServer() {
             // then keeps polling.
             initializeScheduledMessageDispatcher(providerRuntimeService);
             initializeMonitors(providerRuntimeService);
+            sideChatsDb.recover();
+            initializeMessageQueue(providerRuntimeService);
 
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {
@@ -386,6 +396,7 @@ async function startServer() {
         await closeSessionsWatcher();
         closeScheduledMessageDispatcher();
         closeMonitors();
+        closeMessageQueue();
         // Clean up plugin processes on shutdown
         const shutdownRuntimeServices = async () => {
             try {

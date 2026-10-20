@@ -190,7 +190,8 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
     }
     dispatchInFlight = true;
     void dispatchDueScheduledMessages(runtime)
-      .then(() => dispatchQueuedMessages(runtime))
+      // The durable Message Queue dispatcher imports and owns legacy queued
+      // drafts. Do not race it by removing the old slot here.
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         console.error('[ScheduledMessages] Dispatch pass failed', { error: message });

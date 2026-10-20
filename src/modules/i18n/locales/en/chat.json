@@ -445,12 +445,49 @@
     "open": "Open side chat",
     "close": "Close side chat",
     "openFull": "Open as main chat",
-    "context": "A separate conversation with the context captured when opened. Project files are shared.",
+    "context": "Independent conversation from the latest completed parent reply. Project files are shared.",
     "loading": "Preparing conversation context…",
     "failed": "Could not open a side chat. The main chat must have saved history.",
     "retry": "Try again",
     "returnReply": "Add latest answer to main draft",
     "replyPrefix": "From the side conversation:",
-    "selectedContext": "Question about this passage:"
+    "selectedContext": "Question about this passage:",
+    "defaultName": "Side conversation {{number}}",
+    "choose": "Choose side conversation",
+    "new": "New side conversation",
+    "rename": "Rename side conversation",
+    "archive": "Archive side conversation",
+    "restore": "Restore side conversation",
+    "save": "Save title",
+    "history": "Archived and past side conversations",
+    "noActive": "No active side conversation",
+    "showContext": "Show inherited context",
+    "hideContext": "Hide inherited context",
+    "status": {
+      "creating": "Creating",
+      "archived": "Archived",
+      "promoted": "Main conversation",
+      "failed": "Creation failed"
+    }
+  },
+  "queue": {
+    "title": "Message queue",
+    "edit": "Edit queued message",
+    "save": "Save",
+    "cancel": "Cancel queued message",
+    "retry": "Retry queued message",
+    "history": "Submission history",
+    "blocked": "Later messages are paused until you retry or cancel this entry.",
+    "status": {
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Completed",
+      "failed": "Failed",
+      "interrupted": "Interrupted",
+      "cancelled": "Cancelled"
+    },
+    "attempts": "Attempts",
+    "add": "Add to message queue",
+    "attachmentsOnly": "Attachment message"
   }
 }

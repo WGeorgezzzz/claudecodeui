@@ -319,6 +319,7 @@ export const sessionsService = {
   async forkSessionById(
     sessionId: string,
     options: { upToAnchorId?: string; title?: string } = {},
+    reservedSessionId?: string,
   ): Promise<CreateAppSessionResult> {
     const source = sessionsDb.getSessionById(sessionId);
     if (!source) {
@@ -357,7 +358,9 @@ export const sessionsService = {
       title: sessionName,
     });
 
-    const forkSessionId = randomUUID();
+    // Side-chat creation reserves its app ID before provider IO for crash recovery.
+    // HTTP fork callers never control this internal argument.
+    const forkSessionId = reservedSessionId ?? randomUUID();
     sessionsDb.createForkedSession({
       sessionId: forkSessionId,
       provider,
@@ -380,6 +383,16 @@ export const sessionsService = {
       projectPath: source.project_path ?? '',
       sessionName,
     };
+  },
+
+  /** Side Chats uses a provider-confirmed completed boundary instead of copying active tool traffic. */
+  async getCompletedForkAnchorById(sessionId: string): Promise<string> {
+    const source=sessionsDb.getSessionById(sessionId);
+    if (!source?.jsonl_path) throw new AppError('Wait for the first reply to finish before opening a side conversation.',{code:'FORK_SOURCE_NOT_READY',statusCode:409});
+    const fork=providerRegistry.resolveProvider(source.provider as LLMProvider).fork;
+    const anchor=await fork?.getCompletedAnchor?.(source.jsonl_path);
+    if (!anchor) throw new AppError('No completed conversation boundary is available yet.',{code:'FORK_SOURCE_NOT_READY',statusCode:409});
+    return anchor;
   },
 
   /**

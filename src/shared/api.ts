@@ -293,6 +293,18 @@ export const api = {
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}`),
 
   // Scheduled messages: send a message to a session at a future time.
+  sideChats: {
+    list: (parentSessionId: string) => get(`/api/side-chats${query({parentSessionId})}`),
+    create: (body: {parentSessionId:string;requestId:string;title:string;ensureDefault?:boolean}) => post('/api/side-chats',body),
+    adopt: (parentSessionId: string, childSessionId: string) => post('/api/side-chats/adopt',{parentSessionId,childSessionId}),
+    update: (id: string, body: {title?:string;action?:'archive'|'restore'|'promote'}) => patch(`/api/side-chats/${encodeURIComponent(id)}`,body),
+  },
+  messageQueue: {
+    list: (sessionId: string) => get(`/api/message-queue${query({sessionId})}`),
+    enqueue: (body: {sessionId:string;requestId:string;content:string;options:Record<string,unknown>}) => post('/api/message-queue',body),
+    update: (id: string, body: {revision:number;content?:string;action?:'cancel'|'retry'}) => patch(`/api/message-queue/${encodeURIComponent(id)}`,body),
+    attempts: (id: string) => get(`/api/message-queue/${encodeURIComponent(id)}/attempts`),
+  },
   monitors: {
     update: (id: string, input: {name:string;content:string;intervalMinutes:number}) => patch('/api/monitors/' + encodeURIComponent(id), input),
     list: (sessionId?: string) => get('/api/monitors' + (sessionId ? '?sessionId=' + encodeURIComponent(sessionId) : '')),

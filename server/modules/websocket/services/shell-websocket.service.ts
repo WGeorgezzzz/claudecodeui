@@ -204,6 +204,14 @@ type ShellLaunch = {
   claudeFollowsAppTheme: boolean;
 };
 
+function configuredClaudeShellCommand(): string {
+  const configured=process.env.CLAUDE_CLI_PATH?.trim();
+  if (!configured) return 'claude';
+  const script=/\.[cm]?js$/i.test(configured);
+  const command=script?`${quoteShellArgument(process.execPath)} ${quoteShellArgument(configured)}`:quoteShellArgument(configured);
+  return os.platform()==='win32'?`& ${command}`:command;
+}
+
 /**
  * Resolves provider command line for plain shell and agent-backed shell modes.
  */
@@ -222,9 +230,11 @@ function buildShellCommand(
     provider === 'plain-shell';
 
   const otherProgram = (command: string): ShellLaunch => ({ command, claudeFollowsAppTheme: false });
+  const claudeCommand=configuredClaudeShellCommand();
+  const initialClaudeCommand=provider==='claude'?initialCommand.replace(/^claude(?=\s|$)/,()=>claudeCommand):initialCommand;
 
   if (isPlainShell) {
-    return otherProgram(initialCommand);
+    return otherProgram(initialClaudeCommand);
   }
 
   if (provider === 'cursor') {
@@ -261,15 +271,15 @@ function buildShellCommand(
   const launchFlags = `${bypassFlag}${theme.flag}`;
   if (resumeSessionId) {
     const command = os.platform() === 'win32'
-      ? `claude --resume "${resumeSessionId}"${launchFlags}; if ($LASTEXITCODE -ne 0) { claude${launchFlags} }`
-      : `claude --resume "${resumeSessionId}"${launchFlags} || claude${launchFlags}`;
+      ? `${claudeCommand} --resume "${resumeSessionId}"${launchFlags}; if ($LASTEXITCODE -ne 0) { ${claudeCommand}${launchFlags} }`
+      : `${claudeCommand} --resume "${resumeSessionId}"${launchFlags} || ${claudeCommand}${launchFlags}`;
     return { command, claudeFollowsAppTheme: theme.followsAppTheme };
   }
   if (initialCommand) {
     // A caller's own command (e.g. `claude /login`) is launched as given.
-    return otherProgram(initialCommand);
+    return otherProgram(initialClaudeCommand);
   }
-  return { command: `claude${launchFlags}`, claudeFollowsAppTheme: theme.followsAppTheme };
+  return { command: `${claudeCommand}${launchFlags}`, claudeFollowsAppTheme: theme.followsAppTheme };
 }
 
 // Claude Code's built-in theme ids (the `/theme` picker of CLI 2.1.280). A

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon } from 'lucide-react';
 
@@ -29,11 +29,15 @@ import {
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
+import { useMessageQueue } from '@/modules/chat/composer/useMessageQueue';
+import { MessageQueuePanel } from '@/modules/chat/composer/MessageQueuePanel';
 
 type ChatInterfaceProps = {
   isSideChat?: boolean;
+  contextCutoff?: string;
   onOpenSideChat?: (prompt?: string) => void;
   draftInsertion?: { id: number; text: string };
+  onDraftInserted?: ()=>void;
   onReturnReply?: (text: string) => void;
   isActive: boolean;
   selectedProject: Project | null;
@@ -60,8 +64,10 @@ type ChatInterfaceProps = {
  */
 function ChatInterface({
   isSideChat = false,
+  contextCutoff,
   onOpenSideChat,
   draftInsertion,
+  onDraftInserted,
   onReturnReply,
   isActive,
   selectedProject,
@@ -184,6 +190,14 @@ function ChatInterface({
     lastSeqRef,
     sessionStore,
   });
+  const messageQueue=useMessageQueue(currentSessionId || selectedSession?.id || null);
+  // A side chat keeps the full provider context, while inherited rows are folded in its UI.
+  const [showInherited,setShowInherited]=useState(false);
+  const contextTime=contextCutoff?Date.parse(contextCutoff):NaN;
+  const showMessage=(message:ChatMessage)=>showInherited || !Number.isFinite(contextTime)
+    || new Date(message.timestamp instanceof Date?message.timestamp.getTime():message.timestamp).getTime()>contextTime;
+  const displayMessages=isSideChat?chatMessages.filter(showMessage):chatMessages;
+  const displayVisibleMessages=isSideChat?visibleMessages.filter(showMessage):visibleMessages;
 
   // Brand-new conversation: the composer allocated a stable session id via
   // the session gateway before the first send. Record it locally and put it
@@ -247,6 +261,7 @@ function ChatInterface({
     beginEditMessage,
     cancelEditMessage,
   } = useChatComposerState({
+    enqueueMessage:messageQueue.enqueue,
     selectedProject,
     selectedSession,
     currentSessionId,
@@ -339,7 +354,8 @@ function ChatInterface({
     if (!draftInsertion || appliedDraft.current === draftInsertion.id) return;
     appliedDraft.current = draftInsertion.id;
     insertComposerText(draftInsertion.text);
-  }, [draftInsertion, insertComposerText]);
+    onDraftInserted?.();
+  }, [draftInsertion, insertComposerText, onDraftInserted]);
 
   useEffect(() => {
     if (!canAbortSession || isSideChat) {
@@ -479,6 +495,9 @@ function ChatInterface({
       <div className="flex h-full min-h-0 flex-col">
         <MarkdownWorkspaceContext.Provider value={markdownWorkspaceValue}>
           <TranscriptSessionContext.Provider value={transcriptSessionValue}>
+            {isSideChat && contextCutoff && <button type="button"
+              className="mx-4 mt-2 self-start rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+              onClick={()=>setShowInherited(value=>!value)}>{t(showInherited?'sideChat.hideContext':'sideChat.showContext')}</button>}
             <ChatMessagesPane
               scrollContainerRef={scrollContainerRef}
               // Not redundant with the `scroll` listener. A first page is 20 rows,
@@ -491,7 +510,7 @@ function ChatInterface({
               isLoadingSessionMessages={isLoadingSessionMessages}
               isProcessing={isProcessing}
               hasActivityIndicator={hasActivityIndicator}
-              chatMessages={chatMessages}
+              chatMessages={displayMessages}
               selectedSession={selectedSession}
               currentSessionId={currentSessionId}
               provider={provider}
@@ -511,7 +530,7 @@ function ChatInterface({
               totalMessages={totalMessages}
               sessionMessagesCount={chatMessages.length}
               visibleMessageCount={visibleMessageCount}
-              visibleMessages={visibleMessages}
+              visibleMessages={displayVisibleMessages}
               loadEarlierMessages={loadEarlierMessages}
               revealMessage={revealMessage}
               backgroundTasks={sessionActivity?.tasks}
@@ -555,13 +574,16 @@ function ChatInterface({
 
           {onReturnReply && <div className="flex justify-end px-4 pb-2">
             <button type="button" className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40"
-              disabled={!chatMessages.some(message => message.type === 'assistant' && !message.isThinking && !message.isToolUse && typeof message.content === 'string' && message.content.trim())}
+              disabled={!displayMessages.some(message => message.type === 'assistant' && !message.isThinking && !message.isToolUse && typeof message.content === 'string' && message.content.trim())}
               onClick={() => {
-                const answer = [...chatMessages].reverse().find(message => message.type === 'assistant' && !message.isThinking && !message.isToolUse && typeof message.content === 'string' && message.content.trim());
+                const answer = [...displayMessages].reverse().find(message => message.type === 'assistant' && !message.isThinking && !message.isToolUse && typeof message.content === 'string' && message.content.trim());
                 if (answer) onReturnReply(String(answer.content));
               }}>{t('sideChat.returnReply')}</button>
           </div>}
+          <MessageQueuePanel key={currentSessionId||selectedSession?.id||'new'} items={messageQueue.items}
+            error={messageQueue.error} update={messageQueue.update} attempts={messageQueue.attempts}/>
           <ChatComposer
+          onQueue={currentSessionId||selectedSession?.id?()=>{void handleSubmit({preventDefault:()=>{}} as never,undefined,{forceQueue:true});}:undefined}
           compact={isSideChat}
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}

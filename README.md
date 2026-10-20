@@ -1,7 +1,7 @@
 > **WGeorgezzzz workflow fork / Codex 工作流对标实验**
 >
-> 在上游 v1.37.5 基础上加入独立侧边对话、中性桌面 UI、Claude 会话记忆、可调并排工作区、本地文件预览、行级审阅、后台续聊及持久自动监测。
-> [功能对照与安装](docs/CODEX-PARITY.zh-CN.md) · [验证记录与已知限制](docs/FORK-VALIDATION.md)。
+> 在上游 v1.37.5 基础上加入服务端侧边会话管理、可靠消息队列、独立 Windows 安装包、中性桌面 UI、Claude 会话记忆、可调并排工作区、本地文件预览、行级审阅、后台续聊及持久自动监测。
+> [Windows 独立版](docs/WORKBENCH-WINDOWS.md) · [功能对照与安装](docs/CODEX-PARITY.zh-CN.md) · [验证记录与已知限制](docs/FORK-VALIDATION.md)。
 > 保留上游作者和 AGPL-3.0-or-later 许可证；本 fork 不是 OpenAI 或 Anthropic 官方产品。
 
 <div align="center">

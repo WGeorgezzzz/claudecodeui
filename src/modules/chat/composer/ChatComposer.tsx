@@ -10,7 +10,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
+import { ListPlus, PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
@@ -45,6 +45,7 @@ type MentionableFile = {
 };
 
 type ChatComposerProps = {
+  onQueue?: ()=>void;
   compact?: boolean;
   monitorSessionId?: string | null;
   pendingPermissionRequests: PendingPermissionRequest[];
@@ -127,6 +128,7 @@ type ChatComposerProps = {
  * model/permission popovers that drive the next turn.
  */
 export default function ChatComposer({
+  onQueue,
   compact = false,
   monitorSessionId,
   pendingPermissionRequests,
@@ -492,6 +494,9 @@ export default function ChatComposer({
           </PromptInputTools>
 
           <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+            {!compact&&onQueue&&<button type="button" aria-label={t('queue.add')} title={t('queue.add')}
+              disabled={!input.trim()&&attachedFiles.length===0} onClick={onQueue}
+              className="workspace-icon-button disabled:opacity-40"><ListPlus size={16}/></button>}
             {!compact && providerLabel.toLowerCase().includes('claude') && <MonitorPanel sessionId={monitorSessionId ?? null} draft={input} options={{model,effort,permissionMode}} />}
             {!compact && <ScheduleMessagePopover
               disabled={!input.trim()}

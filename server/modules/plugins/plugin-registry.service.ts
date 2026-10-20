@@ -4,13 +4,15 @@ import path from 'path';
 import os from 'os';
 
 import { spawn } from 'cross-spawn';
+import { getCloudCliHomeDir } from '@/shared/index.js';
 
 import {
   createPluginGitError, createPluginGitSpawnError, getPluginGitSpawnOptions, stopPluginGitOnServerExit,
 } from './plugin-git.service.js';
 
-const PLUGINS_DIR = path.join(os.homedir(), '.claude-code-ui', 'plugins');
-const PLUGINS_CONFIG_PATH = path.join(os.homedir(), '.claude-code-ui', 'plugins.json');
+const pluginHome=process.env.CLOUDCLI_HOME?getCloudCliHomeDir():path.join(os.homedir(),'.claude-code-ui');
+const PLUGINS_DIR = path.join(pluginHome, 'plugins');
+const PLUGINS_CONFIG_PATH = path.join(pluginHome, 'plugins.json');
 
 const REQUIRED_MANIFEST_FIELDS = ['name', 'displayName', 'entry'];
 

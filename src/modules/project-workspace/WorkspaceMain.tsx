@@ -322,6 +322,7 @@ function WorkspaceMain({
         {sideChatOpen && selectedSession && <div className="side-chat-dock">
           <SideChatPanel key={selectedSession.id} parent={selectedSession} project={selectedProject}
             ws={ws} sendMessage={sendMessage} draft={sideChat?.draft}
+            onDraftConsumed={()=>setSideChat(value=>value?{...value,draft:undefined}:value)}
             onClose={() => setSideChat(null)} onShowSettings={onShowSettings}
             showThinking={showThinking} showRawParameters={showRawParameters} sendByCtrlEnter={sendByCtrlEnter}
             onPromote={id => { setSideChat(null); onNavigateToSession(id); }}

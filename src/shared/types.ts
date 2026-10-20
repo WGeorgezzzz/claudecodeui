@@ -1859,3 +1859,26 @@ type TaskStatus =
 
 /** A TaskMaster task's priority; high, medium and low are the known values and the string fallback tolerates anything else TaskMaster emits. */
 type TaskPriority = 'high' | 'medium' | 'low' | string;
+//----------------- WORKBENCH SIDE CHATS AND QUEUE ------------
+/** Server-owned relationship; browser state may remember selection but never defines parentage. */
+export type SideConversation = {
+  id: string; parent_session_id: string; child_session_id: string; title: string;
+  status: 'creating'|'active'|'archived'|'promoted'|'failed';
+  context_cutoff: string; created_at: string; updated_at: string; error: string|null;
+};
+/** A durable FIFO request displayed by the queue hook and panel; revisions reject stale edits. */
+export type QueuedConversationMessage = {
+  id: string; session_id: string; content: string; revision: number; attempt_count: number;
+  status: 'queued'|'running'|'succeeded'|'failed'|'interrupted'|'cancelled';
+  error: string|null; created_at: string; started_at: string|null; finished_at: string|null;
+};
+/** Composer submission after attachment upload; session and request identities are added by the queue hook. */
+export type QueueSubmission = {
+  content: string; options: Record<string,unknown>; attachments: unknown[];
+};
+/** One immutable queue execution receipt, including failures retained across retries. */
+export type QueuedMessageAttempt = {
+  id:string;attempt:number;status:'running'|'succeeded'|'failed'|'interrupted';
+  started_at:string;finished_at:string|null;error:string|null;
+};
+// ---------------------------

@@ -240,50 +240,50 @@ async function dispatchRun(
     return { started: false, error: 'A run is already in progress for this session.' };
   }
 
-  const clientOptions = (data.options ?? {}) as AnyRecord;
-  const command = typeof data.content === 'string' ? data.content : '';
-
-  // Record what this turn runs with so reopening the session later restores the
-  // same model and reasoning effort, and so the resume path has a
-  // session-scoped model answer to use.
-  if (typeof clientOptions.model === 'string' && clientOptions.model.trim()) {
-    providerModelsService.setSessionModel(provider, sessionId, clientOptions.model);
-  }
-  if (typeof clientOptions.effort === 'string' && clientOptions.effort.trim()) {
-    providerModelsService.setSessionEffort(provider, sessionId, clientOptions.effort);
-  }
-
-  const attachmentCandidates = [
-    ...normalizeAttachmentDescriptors(clientOptions.images),
-    ...normalizeAttachmentDescriptors(clientOptions.files),
-    ...normalizeAttachmentDescriptors(clientOptions.attachments),
-  ];
-  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
-  const uniqueAttachments = verifiedAttachments.filter(
-    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
-  );
-
-  // The provider runtimes receive the stable app session id. When their
-  // CLI/SDK needs the provider-native id for resume, they resolve it from the
-  // session row themselves (sessionsService.resolveProviderSessionId).
-  // Brand-new sessions have no provider id yet, so the runtime starts fresh
-  // and announces one, which the gateway writer captures and maps back to the
-  // app session id.
-  const runtimeOptions: AnyRecord = {
-    ...clientOptions,
-    ...extraRuntimeOptions,
-    // Attachments are re-validated server-side: only direct children of the
-    // global upload store may reach provider runtimes or their file tools.
-    attachments: uniqueAttachments,
-    images: uniqueAttachments.filter(isImageAttachmentDescriptor),
-    files: uniqueAttachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
-    sessionId,
-    cwd: clientOptions.cwd ?? session.project_path ?? undefined,
-    projectPath: session.project_path ?? clientOptions.projectPath,
-  };
-
   let failure: string | null = null;
   try {
+    const clientOptions = (data.options ?? {}) as AnyRecord;
+    const command = typeof data.content === 'string' ? data.content : '';
+
+    // Record what this turn runs with so reopening the session later restores the
+    // same model and reasoning effort, and so the resume path has a
+    // session-scoped model answer to use.
+    if (typeof clientOptions.model === 'string' && clientOptions.model.trim()) {
+      providerModelsService.setSessionModel(provider, sessionId, clientOptions.model);
+    }
+    if (typeof clientOptions.effort === 'string' && clientOptions.effort.trim()) {
+      providerModelsService.setSessionEffort(provider, sessionId, clientOptions.effort);
+    }
+
+    const attachmentCandidates = [
+      ...normalizeAttachmentDescriptors(clientOptions.images),
+      ...normalizeAttachmentDescriptors(clientOptions.files),
+      ...normalizeAttachmentDescriptors(clientOptions.attachments),
+    ];
+    const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
+    const uniqueAttachments = verifiedAttachments.filter(
+      (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
+    );
+
+    // The provider runtimes receive the stable app session id. When their
+    // CLI/SDK needs the provider-native id for resume, they resolve it from the
+    // session row themselves (sessionsService.resolveProviderSessionId).
+    // Brand-new sessions have no provider id yet, so the runtime starts fresh
+    // and announces one, which the gateway writer captures and maps back to the
+    // app session id.
+    const runtimeOptions: AnyRecord = {
+      ...clientOptions,
+      ...extraRuntimeOptions,
+      // Attachments are re-validated server-side: only direct children of the
+      // global upload store may reach provider runtimes or their file tools.
+      attachments: uniqueAttachments,
+      images: uniqueAttachments.filter(isImageAttachmentDescriptor),
+      files: uniqueAttachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+      sessionId,
+      cwd: clientOptions.cwd ?? session.project_path ?? undefined,
+      projectPath: session.project_path ?? clientOptions.projectPath,
+    };
+
     // Runs only now that the session is reserved, because an edit rewinds the
     // conversation here and a rewind for a run that was never admitted cannot
     // be taken back. Inside the try so a rewind that throws still releases the
@@ -438,7 +438,7 @@ async function handleChatAbort(
 
   const success = await dependencies.runtime.abort(run.provider, sessionId);
 
-  chatRunRegistry.completeRun(sessionId, {
+  chatRunRegistry.completeRunIfCurrent(run, {
     exitCode: success ? 0 : 1,
     aborted: true,
   });

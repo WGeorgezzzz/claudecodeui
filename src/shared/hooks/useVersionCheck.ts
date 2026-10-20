@@ -58,6 +58,13 @@ export const useVersionCheck = (owner: string, repo: string) => {
   useEffect(() => {
     const checkVersion = async () => {
       try {
+        const health=await fetch('/health').then(response=>response.json());
+        if (health.distribution==='workbench') {
+          // The standalone distribution is updated by its own installer,
+          // never by replacing it with the upstream npm package.
+          setUpdateAvailable(false);
+          return;
+        }
         const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`);
         const data = await response.json();
 

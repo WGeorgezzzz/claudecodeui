@@ -774,3 +774,19 @@ test('terminal input typed before initialization is retained in order', () => {
   assert.deepEqual(writes,['first second\r','next\r']);
   pty.emitExit();
 });
+
+test('Claude login and resumed shells use the configured wrapper rather than a global CLI',()=>{
+  const previous=process.env.CLAUDE_CLI_PATH;
+  process.env.CLAUDE_CLI_PATH=path.join(os.tmpdir(),'custom CLI','wrapper.js');
+  try {
+    const {calls,dependencies,ptys}=spawnRecorder('native-session');
+    launch(dependencies,{provider:'claude',initialCommand:'claude /login'});
+    launch(dependencies,{provider:'claude',hasSession:true,sessionId:'app-session'});
+    assert.ok(calls.every(call=>call.command.includes('wrapper.js')));
+    assert.ok(calls[0].command.endsWith(' /login'));
+    assert.match(calls[1].command,/--resume "native-session"/);
+    ptys.forEach(pty=>pty.emitExit());
+  } finally {
+    if(previous===undefined)delete process.env.CLAUDE_CLI_PATH;else process.env.CLAUDE_CLI_PATH=previous;
+  }
+});

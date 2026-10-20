@@ -22,6 +22,29 @@ export type ApiSuccessShape<TData = unknown> = {
 export type AnyRecord = Record<string, any>;
 
 // ---------------------------
+
+//----------------- WORKBENCH CONVERSATION LIFECYCLE ------------
+/** Database-owned side conversation shared by its repository and lifecycle service.
+ * Child IDs are reserved before provider IO, so recovery never guesses which fork belongs to a request. */
+export type SideChatRecord = {
+  id: string; user_id: number; parent_session_id: string; child_session_id: string;
+  request_id: string; request_title: string; title: string; status: 'creating'|'active'|'archived'|'promoted'|'failed';
+  context_cutoff: string; created_at: string; updated_at: string; error: string|null;
+};
+/** One durable FIFO submission. Request IDs deduplicate transport retries; revision protects
+ * pending edits. Failed/interrupted heads block later submissions until an explicit retry/cancel. */
+export type QueuedTurnRecord = {
+  sequence: number; id: string; user_id: number; session_id: string; request_id: string;
+  payload_hash: string; content: string; options: string; status: 'queued'|'running'|'succeeded'|'failed'|'interrupted'|'cancelled';
+  revision: number; attempt_count: number; run_id: string|null; error: string|null;
+  created_at: string; started_at: string|null; finished_at: string|null;
+};
+/** Immutable outcome of each claimed queue attempt. Retrying a submission retains prior failures here. */
+export type QueuedTurnAttempt = {
+  id: string; message_id: string; attempt: number; status: 'running'|'succeeded'|'failed'|'interrupted';
+  started_at: string; finished_at: string|null; error: string|null;
+};
+// ---------------------------
 //----------------- WEBSOCKET TRANSPORT TYPES ------------
 /**
  * Minimal websocket client contract used by backend broadcaster services.

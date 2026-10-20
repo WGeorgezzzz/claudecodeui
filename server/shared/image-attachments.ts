@@ -1,6 +1,7 @@
 import { promises as fs, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { getCloudCliHomeDir } from '@/shared/utils.js';
 
 /**
  * Shared chat-attachment plumbing for every provider runtime.
@@ -19,7 +20,7 @@ import path from 'node:path';
 
 /** Global storage folder for uploaded chat image attachments. */
 export function getGlobalImageAssetsDir(): string {
-  return path.join(os.homedir(), '.cloudcli', 'assets');
+  return path.join(getCloudCliHomeDir(), 'assets');
 }
 
 export type ImageAttachmentDescriptor = {
