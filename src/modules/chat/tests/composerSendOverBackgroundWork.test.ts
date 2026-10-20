@@ -52,7 +52,7 @@ const backgroundOnly: SessionActivityMap = new Map([[
 
 const uploads = () => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/assets/files'));
 
-const render = (processingSessions: SessionActivityMap, provider: LLMProvider = 'cursor') => {
+const render = (processingSessions: SessionActivityMap, provider: LLMProvider = 'cursor', onOpenSideChat?: (prompt?: string) => void, busy = false) => {
   const sent: Array<{ type: string }> = [];
   const view = renderHook(() =>
     useChatComposerState({
@@ -65,7 +65,8 @@ const render = (processingSessions: SessionActivityMap, provider: LLMProvider = 
       resolvePermissionModeForProvider: () => 'default' as PermissionMode,
       currentProviderModel: 'test-model',
       currentProviderEffort: 'medium',
-      isLoading: false,
+      isLoading: busy,
+      onOpenSideChat,
       processingSessions,
       canAbortSession: false,
       tokenBudget: null,
@@ -117,6 +118,17 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
+});
+
+test('/side opens a separate question while the parent is busy without queuing or sending', async () => {
+  const open=vi.fn();
+  const {view,sends}=render(backgroundOnly,'claude',open,true);
+  act(()=>view.result.current.setInput('/side Explain the current approach'));
+  await act(async()=>{await startSubmit(view);});
+  assert.deepEqual(open.mock.calls,[['Explain the current approach']]);
+  assert.equal(sends().length,0);
+  assert.equal(view.result.current.queuedDraft,null);
+  assert.equal(view.result.current.input,'');
 });
 
 test('sending on a session with background work asks first, naming the session\'s own tasks', async () => {

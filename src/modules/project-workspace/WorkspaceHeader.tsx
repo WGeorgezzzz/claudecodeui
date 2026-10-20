@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PanelRightOpen } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -10,6 +10,8 @@ import WorkspaceTabs from '@/modules/project-workspace/WorkspaceTabs';
 import WorkspaceTitle from '@/modules/project-workspace/WorkspaceTitle';
 
 type WorkspaceHeaderProps = {
+  onOpenSideChat?: () => void;
+  sideChatOpen?: boolean;
   claudeLayout?: boolean;
   activeTab: AppTab;
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
@@ -25,6 +27,8 @@ type WorkspaceHeaderProps = {
 
 /** Rendered by WorkspaceMain to show the workspace title and chat connection status alongside the scrollable tab bar. */
 export default function WorkspaceHeader({
+  onOpenSideChat,
+  sideChatOpen,
   claudeLayout = false,
   activeTab,
   setActiveTab,
@@ -110,6 +114,12 @@ export default function WorkspaceHeader({
             onRenameSession={onRenameSession}
           />
           <WorkspaceConnectionStatus />
+          {onOpenSideChat && <button type="button" className="workspace-icon-button shrink-0"
+            aria-label={t('chat:sideChat.open')} aria-pressed={Boolean(sideChatOpen)}
+            title={`${t('chat:sideChat.open')} (Ctrl+Alt+S)`}
+            onMouseDown={event => event.preventDefault()} onClick={onOpenSideChat}>
+            <PanelRightOpen size={17}/>
+          </button>}
         </div>
 
         <div className="-mx-3 min-w-0 sm:mx-0 sm:flex-1">

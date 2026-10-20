@@ -45,6 +45,7 @@ type MentionableFile = {
 };
 
 type ChatComposerProps = {
+  compact?: boolean;
   monitorSessionId?: string | null;
   pendingPermissionRequests: PendingPermissionRequest[];
   handlePermissionDecision: (
@@ -126,6 +127,7 @@ type ChatComposerProps = {
  * model/permission popovers that drive the next turn.
  */
 export default function ChatComposer({
+  compact = false,
   monitorSessionId,
   pendingPermissionRequests,
   handlePermissionDecision,
@@ -489,12 +491,12 @@ export default function ChatComposer({
 
           </PromptInputTools>
 
-          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-            {providerLabel.toLowerCase().includes('claude') && <MonitorPanel sessionId={monitorSessionId ?? null} draft={input} options={{model,effort,permissionMode}} />}
-            <ScheduleMessagePopover
+          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+            {!compact && providerLabel.toLowerCase().includes('claude') && <MonitorPanel sessionId={monitorSessionId ?? null} draft={input} options={{model,effort,permissionMode}} />}
+            {!compact && <ScheduleMessagePopover
               disabled={!input.trim()}
               onSchedule={onScheduleMessage}
-            />
+            />}
 
             <ComposerModelMenu
               providerLabel={providerLabel}

@@ -2,6 +2,96 @@
 @tailwind components;
 @tailwind utilities;
 
+/* A quiet desktop workspace: navigation is distinct from the writing surface. */
+.workspace-shell {
+  --workspace-sidebar: #f7f7f8;
+  --workspace-panel: #fafafa;
+}
+.dark .workspace-shell {
+  --workspace-sidebar: #181818;
+  --workspace-panel: #161616;
+}
+.workspace-sidebar {
+  background: var(--workspace-sidebar);
+}
+.workspace-sidebar .nav-divider {
+  opacity: .45;
+}
+.workspace-sidebar h1 {
+  font-family: inherit !important;
+  font-weight: 600;
+}
+.workspace-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: hsl(var(--muted-foreground));
+}
+.workspace-icon-button:hover,
+.workspace-icon-button[aria-pressed="true"] {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+.workspace-icon-button:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+.workspace-view-options input[type="checkbox"] {
+  accent-color: hsl(var(--primary));
+}
+.workspace-tabs [aria-selected="true"] {
+  background: hsl(var(--muted));
+  box-shadow: none;
+}
+.workspace-shell .chat-message .prose {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.75;
+}
+.workspace-shell .chat-message .prose :where(p, ul, ol) {
+  margin-top: .7em;
+  margin-bottom: .7em;
+}
+.workspace-shell .chat-message .prose :where(pre, code) {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+.side-chat-dock {
+  width: 42%;
+  min-width: 360px;
+  flex-shrink: 0;
+  border-left: 1px solid hsl(var(--border));
+  background: var(--workspace-panel);
+}
+.side-chat-panel .chat-composer-shell {
+  padding: 8px 12px 16px;
+}
+.side-chat-panel .chat-message {
+  padding-inline: 0;
+}
+.side-chat-panel .chat-message .prose {
+  font-size: 13px;
+}
+.side-chat-panel .chat-composer-shell textarea {
+  font-size: 13px;
+}
+.side-chat-panel .chat-composer-shell button[aria-haspopup="menu"] {
+  max-width: 132px;
+}
+@media (max-width: 1000px) {
+  .side-chat-dock {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    width: 100%;
+    min-width: 0;
+    border-left: 0;
+    background: hsl(var(--background));
+  }
+}
+
 /* Global spinner animation - defined early to ensure it loads */
 @keyframes spin {
   0% {
@@ -23,38 +113,38 @@
 
 @layer base {
   :root {
-    --background: 44 22% 96%;
-    --foreground: 36 25% 4%;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 36 25% 4%;
+    --card-foreground: 0 0% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 36 25% 4%;
-    --primary: 221.2 83.2% 53.3%;
+    --popover-foreground: 0 0% 12%;
+    --primary: 0 0% 15%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 44 15% 91%;
-    --secondary-foreground: 36 15% 18%;
-    --muted: 44 15% 91%;
-    --muted-foreground: 40 5% 44%;
-    --accent: 44 15% 91%;
-    --accent-foreground: 36 15% 18%;
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 18%;
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 46%;
+    --accent: 0 0% 95%;
+    --accent-foreground: 0 0% 18%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 44 14% 87%;
-    --input: 44 14% 87%;
-    --ring: 221.2 83.2% 53.3%;
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
+    --ring: 0 0% 15%;
     --radius: 0.5rem;
 
     /* Nav design tokens */
-    --nav-glass-bg: 44 22% 96% / 0.7;
+    --nav-glass-bg: 0 0% 97% / 0.7;
     --nav-glass-blur: 20px;
     --nav-glass-saturate: 1.8;
-    --nav-tab-glow: 221.2 83.2% 53.3% / 0.18;
-    --nav-tab-ring: 221.2 83.2% 53.3% / 0.10;
+    --nav-tab-glow: 0 0% 15% / 0.18;
+    --nav-tab-ring: 0 0% 15% / 0.10;
     --nav-float-shadow: 0 0% 0% / 0.06;
-    --nav-float-ring: 44 14% 87% / 0.5;
-    --nav-divider-color: 44 14% 87% / 0.5;
-    --nav-input-bg: 44 15% 91% / 0.5;
-    --nav-input-focus-ring: 221.2 83.2% 53.3% / 0.22;
+    --nav-float-ring: 0 0% 89% / 0.5;
+    --nav-divider-color: 0 0% 89% / 0.5;
+    --nav-input-bg: 0 0% 95% / 0.5;
+    --nav-input-focus-ring: 0 0% 15% / 0.22;
 
     /* Safe area CSS variables */
     --safe-area-inset-top: env(safe-area-inset-top);
@@ -86,36 +176,36 @@
 
   .dark {
     --background: 0 0% 8%;
-    --foreground: 40 8% 93%;
+    --foreground: 0 0% 93%;
     --card: 0 0% 12%;
-    --card-foreground: 40 8% 93%;
+    --card-foreground: 0 0% 93%;
     --popover: 0 0% 12%;
-    --popover-foreground: 40 8% 93%;
-    --primary: 217.2 91.2% 59.8%;
+    --popover-foreground: 0 0% 93%;
+    --primary: 0 0% 92%;
     --primary-foreground: 0 0% 8%;
     --secondary: 0 0% 17%;
-    --secondary-foreground: 40 8% 93%;
+    --secondary-foreground: 0 0% 93%;
     --muted: 0 0% 17%;
     --muted-foreground: 0 0% 60%;
     --accent: 0 0% 17%;
-    --accent-foreground: 40 8% 93%;
+    --accent-foreground: 0 0% 93%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 40 8% 93%;
+    --destructive-foreground: 0 0% 93%;
     --border: 0 0% 17%;
     --input: 0 0% 23%;
-    --ring: 217.2 91.2% 59.8%;
+    --ring: 0 0% 92%;
 
     /* Nav design tokens — dark overrides */
     --nav-glass-bg: 0 0% 12% / 0.55;
     --nav-glass-blur: 24px;
     --nav-glass-saturate: 1.6;
-    --nav-tab-glow: 217.2 91.2% 59.8% / 0.25;
-    --nav-tab-ring: 217.2 91.2% 59.8% / 0.15;
+    --nav-tab-glow: 0 0% 92% / 0.25;
+    --nav-tab-ring: 0 0% 92% / 0.15;
     --nav-float-shadow: 0 0% 0% / 0.35;
     --nav-float-ring: 0 0% 17% / 0.3;
     --nav-divider-color: 0 0% 17% / 0.5;
     --nav-input-bg: 0 0% 17% / 0.5;
-    --nav-input-focus-ring: 217.2 91.2% 59.8% / 0.25;
+    --nav-input-focus-ring: 0 0% 92% / 0.25;
   }
 }
 
@@ -129,7 +219,7 @@
   body {
     @apply bg-background text-foreground;
 
-    font-family: "Encode Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     margin: 0;

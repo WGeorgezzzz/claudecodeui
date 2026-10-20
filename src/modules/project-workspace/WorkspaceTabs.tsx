@@ -105,7 +105,7 @@ export default function WorkspaceTabs({
     <PillBar
       role="tablist"
       aria-label={t('tabs.views', { defaultValue: 'Workspace views' })}
-      className="min-w-max border border-border/40 bg-muted/50 shadow-inner shadow-black/[0.025] dark:shadow-black/10"
+      className="workspace-tabs min-w-max border-0 bg-transparent shadow-none"
     >
       {tabs.map((tab, index) => {
         const isActive = tab.id === activeTab;

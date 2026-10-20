@@ -31,6 +31,10 @@ import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 
 type ChatInterfaceProps = {
+  isSideChat?: boolean;
+  onOpenSideChat?: (prompt?: string) => void;
+  draftInsertion?: { id: number; text: string };
+  onReturnReply?: (text: string) => void;
   isActive: boolean;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -55,6 +59,10 @@ type ChatInterfaceProps = {
  * composer state that ChatMessagesPane and ChatComposer render.
  */
 function ChatInterface({
+  isSideChat = false,
+  onOpenSideChat,
+  draftInsertion,
+  onReturnReply,
   isActive,
   selectedProject,
   selectedSession,
@@ -257,6 +265,7 @@ function ChatInterface({
     onSessionEstablished: handleSessionEstablished,
     onFileOpen,
     onShowSettings,
+    onOpenSideChat,
     scrollToBottom,
     addMessage,
     setIsUserScrolledUp,
@@ -322,10 +331,18 @@ function ChatInterface({
     });
   }, [setInput, textareaRef]);
 
-  usePaletteOpsRegister({ insertComposerText });
+  usePaletteOpsRegister(isSideChat ? {} : { insertComposerText });
+
+  // A selected passage or /side question is inserted once without submitting it.
+  const appliedDraft = useRef<number | null>(null);
+  useEffect(() => {
+    if (!draftInsertion || appliedDraft.current === draftInsertion.id) return;
+    appliedDraft.current = draftInsertion.id;
+    insertComposerText(draftInsertion.text);
+  }, [draftInsertion, insertComposerText]);
 
   useEffect(() => {
-    if (!canAbortSession) {
+    if (!canAbortSession || isSideChat) {
       return;
     }
 
@@ -344,7 +361,7 @@ function ChatInterface({
     return () => {
       document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
     };
-  }, [canAbortSession, handleAbortSession]);
+  }, [canAbortSession, handleAbortSession, isSideChat]);
 
   useEffect(() => {
     return () => {
@@ -536,7 +553,16 @@ function ChatInterface({
             </div>
           )}
 
+          {onReturnReply && <div className="flex justify-end px-4 pb-2">
+            <button type="button" className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40"
+              disabled={!chatMessages.some(message => message.type === 'assistant' && !message.isThinking && !message.isToolUse && typeof message.content === 'string' && message.content.trim())}
+              onClick={() => {
+                const answer = [...chatMessages].reverse().find(message => message.type === 'assistant' && !message.isThinking && !message.isToolUse && typeof message.content === 'string' && message.content.trim());
+                if (answer) onReturnReply(String(answer.content));
+              }}>{t('sideChat.returnReply')}</button>
+          </div>}
           <ChatComposer
+          compact={isSideChat}
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}

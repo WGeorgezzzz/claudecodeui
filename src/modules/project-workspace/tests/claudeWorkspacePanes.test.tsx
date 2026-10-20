@@ -15,7 +15,7 @@ vi.mock('@/modules/plugins',()=>({PluginTabContent:()=>null}));
 vi.mock('@/modules/browser-use',()=>({useBrowserUseEnabled:()=>false,BrowserUsePanel:()=>null}));
 vi.mock('@/modules/task-master',()=>({useTasksSettings:()=>({tasksEnabled:false,isTaskMasterInstalled:false}),useTaskMasterProjectSync:()=>{},TaskMasterPanel:()=>null}));
 vi.mock('@/modules/standalone-shell',()=>({StandaloneShell:(props:Record<string,unknown>)=>{shellProps.push(props);return <div>Terminal content</div>;}}));
-vi.mock('@/modules/command-palette',()=>({usePaletteOpsRegister:()=>{}}));
+vi.mock('@/modules/command-palette',()=>({usePaletteOpsRegister:()=>{},usePaletteOps:()=>({insertComposerText:()=>{}})}));
 vi.mock('@/shared/context/UiPreferencesContext',()=>({useUiPreferences:()=>({showThinking:true,showRawParameters:false,sendByCtrlEnter:false}),useSetUiPreference:()=>()=>{}}));
 vi.mock('@/shared/hooks/useSelectedProvider',()=>({useSelectedProvider:()=> 'claude'}));
 vi.mock('@/modules/project-workspace/WorkspaceHeader',()=>({default:()=>null}));

@@ -439,5 +439,18 @@
     "diffChanged": "The diff changed. Copy your comment, cancel, and select the current line again.",
     "approvePlan": "Approve plan · ask before changes",
     "revisePlan": "Revise plan"
+  },
+  "sideChat": {
+    "title": "Side chat",
+    "open": "Open side chat",
+    "close": "Close side chat",
+    "openFull": "Open as main chat",
+    "context": "A separate conversation with the context captured when opened. Project files are shared.",
+    "loading": "Preparing conversation context…",
+    "failed": "Could not open a side chat. The main chat must have saved history.",
+    "retry": "Try again",
+    "returnReply": "Add latest answer to main draft",
+    "replyPrefix": "From the side conversation:",
+    "selectedContext": "Question about this passage:"
   }
 }

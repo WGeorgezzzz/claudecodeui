@@ -1,5 +1,32 @@
 # Fork validation — 2026-10-20
 
+## Side-chat and visual update
+
+The subsequent frontend update adds a separate side conversation and a neutral
+desktop visual treatment. Frontend validation: **117 files, 796 tests passed**;
+TypeScript and production build passed. The large-bundle warning remains.
+No backend implementation changed in this update; the earlier backend failures
+below remain disclosed.
+
+Live browser acceptance against an isolated service verified:
+
+- Side conversation receives the parent's saved context and has a different session ID.
+- Main and side submissions complete with their own reply markers; neither new
+  message appears in the other's persisted transcript.
+- Closing immediately after sending leaves the side run alive. Reopening shows
+  the completed answer in the same side session.
+- Returning an answer fills the main draft without sending it.
+- `/side <question>` clears the main command draft and prepares the question in
+  the side composer without submitting it to the main task.
+- Strict-mode effects create one fork; failed creation stays visible; late
+  responses cannot replace another parent's panel.
+
+The browser association is stored locally. The server-side conversation is
+persistent and shares project files; this is not a separate worktree or an
+automatically deleted ephemeral session.
+
+## Initial fork validation
+
 Baseline: upstream `0ce5630f` (`v1.37.5`). Platform: Windows, Node.js 24.18.0.
 Validation used the existing local dependency cache. A clean dependency install,
 Linux/macOS acceptance and signed desktop packaging were not performed.

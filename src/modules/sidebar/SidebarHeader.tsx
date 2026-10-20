@@ -1,7 +1,7 @@
-import { FolderPlus, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
+import { FolderPlus, Plus, MessageSquarePlus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { Button, Input, LLMProviderLogo } from '@/shared/ui';
+import { Button, Input } from '@/shared/ui';
 import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '@/shared/constants';
 import { IS_PLATFORM } from '@/shared/utils';
 import type { SidebarSearchMode } from '@/shared/types';
@@ -139,8 +139,8 @@ export default function SidebarHeader({
         </div>
 
         {onNewClaudeSession ? (
-          <Button className="mt-3 h-9 w-full justify-start gap-2 rounded-xl" onClick={onNewClaudeSession}>
-            <LLMProviderLogo provider="claude" className="h-4 w-4" />
+          <Button className="mt-3 h-9 w-full justify-start gap-2 rounded-lg border-0 bg-transparent text-foreground shadow-none hover:bg-muted" onClick={onNewClaudeSession}>
+            <MessageSquarePlus className="h-4 w-4" />
             {t('sessions.newClaude', 'New Claude chat')}
             <Plus className="ml-auto h-4 w-4" />
           </Button>
@@ -228,8 +228,8 @@ export default function SidebarHeader({
         </div>
 
         {onNewClaudeSession && (
-          <Button className="mt-3 h-10 w-full justify-start gap-2 rounded-xl" onClick={onNewClaudeSession}>
-            <LLMProviderLogo provider="claude" className="h-4 w-4" />
+          <Button className="mt-3 h-10 w-full justify-start gap-2 rounded-lg bg-transparent text-foreground shadow-none hover:bg-muted" onClick={onNewClaudeSession}>
+            <MessageSquarePlus className="h-4 w-4" />
             {t('sessions.newClaude', 'New Claude chat')}
           </Button>
         )}

@@ -33,6 +33,7 @@ import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
 
 type UseChatComposerStateArgs = {
+  onOpenSideChat?: (prompt?: string) => void;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
@@ -178,6 +179,7 @@ const getNotificationSessionSummary = (
 const SAFARI_IME_RACE_WINDOW_MS = 30;
 
 export function useChatComposerState({
+  onOpenSideChat,
   selectedProject,
   selectedSession,
   currentSessionId,
@@ -766,6 +768,16 @@ export function useChatComposerState({
       const currentInput = queuedSubmission?.content ?? inputValueRef.current;
       const currentAttachments = queuedSubmission?.attachments ?? attachedFiles;
       const previouslyUploadedAttachments = queuedSubmission?.uploadedAttachments ?? [];
+      // Side questions branch before busy-run queuing and never send to the parent.
+      const sideCommand = currentInput.match(/^\/(?:side|btw)(?:\s+([\s\S]*))?$/);
+      if (sideCommand && onOpenSideChat && !queuedSubmission
+        && currentAttachments.length === 0 && previouslyUploadedAttachments.length === 0) {
+        onOpenSideChat(sideCommand[1]?.trim());
+        setInput('');
+        inputValueRef.current = '';
+        resetCommandMenuState();
+        return;
+      }
       if (
         (
           !currentInput.trim()
@@ -1018,6 +1030,7 @@ export function useChatComposerState({
     },
     [
       selectedSession,
+      onOpenSideChat,
       askBeforeSendingOverBackgroundWork,
       attachedFiles,
       buildSendOptions,

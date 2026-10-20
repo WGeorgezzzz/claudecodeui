@@ -7,7 +7,7 @@ import { StandaloneShell } from '@/modules/standalone-shell';
 import { GitPanel } from '@/modules/git-panel';
 import { PluginTabContent } from '@/modules/plugins';
 import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
-import { usePaletteOpsRegister } from '@/modules/command-palette';
+import { usePaletteOps, usePaletteOpsRegister } from '@/modules/command-palette';
 import { TaskMasterPanel, useTaskMasterProjectSync, useTasksSettings } from '@/modules/task-master';
 import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
 import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
@@ -18,6 +18,7 @@ import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
 import WorkspaceStateView from '@/modules/project-workspace/WorkspaceStateView';
 import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
 import { useWorkspaceSplit } from '@/modules/project-workspace/hooks/useWorkspaceSplit';
+import { SideChatPanel } from '@/modules/project-workspace/SideChatPanel';
 
 type WorkspaceMainProps = {
   selectedProject: Project | null;
@@ -71,6 +72,31 @@ function WorkspaceMain({
   // Retains the user's choice of a side-by-side Claude workspace across reloads.
   const [splitEnabled, setSplitEnabled] = useState(() => localStorage.getItem('claude-workspace-split') !== 'false');
   const workspaceSplit = useWorkspaceSplit();
+  const paletteOps = usePaletteOps();
+  // The parent ID prevents a panel belonging to one conversation appearing in another.
+  const [sideChat, setSideChat] = useState<{ parentId: string; draft?: { id: number; text: string } } | null>(null);
+  const sideChatOpen = Boolean(isClaude && selectedSession && sideChat?.parentId === selectedSession.id);
+  const openSideChat = useCallback((prompt?: string) => {
+    if (!isClaude || !selectedSession) return;
+    setSideChat({ parentId: selectedSession.id,
+      ...(prompt ? { draft: { id: Date.now(), text: prompt } } : {}) });
+    setActiveTab('chat');
+  }, [isClaude, selectedSession?.id, setActiveTab]);
+  const openSelectedSideChat = useCallback(() => {
+    const selection = window.getSelection();
+    const anchor = selection?.anchorNode?.parentElement;
+    const selectedText = anchor?.closest('[data-testid="workspace-chat-pane"]') ? selection?.toString().trim() : '';
+    openSideChat(selectedText ? `${t('sideChat.selectedContext')}\n\n${selectedText}\n\n` : undefined);
+  }, [openSideChat, t]);
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.altKey && event.key.toLowerCase() === 's' && isClaude && selectedSession) {
+        event.preventDefault(); openSelectedSideChat();
+      }
+    };
+    window.addEventListener('keydown', shortcut);
+    return () => window.removeEventListener('keydown', shortcut);
+  }, [isClaude, selectedSession?.id, openSelectedSideChat]);
   // Keep this project's terminal mounted when the user returns to chat, preserving its shell.
   const [terminalProjectId, setTerminalProjectId] = useState<string | null>(null);
   useEffect(() => {
@@ -103,7 +129,7 @@ function WorkspaceMain({
     selectedProject,
     isMobile,
   });
-  const splitPane = isClaude && !isMobile && splitEnabled && !editingFile && !editorExpanded
+  const splitPane = isClaude && !sideChatOpen && !isMobile && splitEnabled && !editingFile && !editorExpanded
     && ['shell', 'files', 'git', 'browser'].includes(activeTab);
   const panelClass = splitPane ? 'h-full min-w-0 shrink-0 overflow-hidden border-l border-border' : 'h-full w-full overflow-hidden';
   const panelStyle = splitPane ? { width: `${workspaceSplit.percent}%` } : undefined;
@@ -176,10 +202,12 @@ function WorkspaceMain({
         onMenuClick={onMenuClick}
         onRenameSession={onRenameSession}
         claudeLayout={isClaude}
+        onOpenSideChat={isClaude && selectedSession ? openSelectedSideChat : undefined}
+        sideChatOpen={sideChatOpen}
       />
 
       {isClaude && (
-        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-4 py-2 text-xs text-muted-foreground" data-testid="claude-workspace-controls">
+        <div className="workspace-view-options flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/50 px-5 py-2 text-xs text-muted-foreground" data-testid="claude-workspace-controls">
           {!isMobile && <label className="flex items-center gap-1.5"><input type="checkbox" checked={splitEnabled} onChange={event => {
             setSplitEnabled(event.target.checked);
             localStorage.setItem('claude-workspace-split', String(event.target.checked));
@@ -193,8 +221,8 @@ function WorkspaceMain({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div ref={workspaceSplit.containerRef} className={`flex min-h-0 min-w-[200px] ${splitPane ? 'flex-row' : 'flex-col'} overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <div ref={workspaceSplit.containerRef} className={`flex min-h-0 min-w-[200px] ${splitPane ? 'flex-row' : 'flex-col'} overflow-hidden ${editorExpanded && !sideChatOpen ? 'hidden' : ''} flex-1`}>
           <div className={`h-full min-w-0 ${splitPane ? 'flex-1' : ''} ${activeTab === 'chat' || splitPane ? 'block' : 'hidden'}`} data-testid="workspace-chat-pane">
             <WorkspaceErrorBoundary showDetails>
               <ChatInterface
@@ -207,6 +235,7 @@ function WorkspaceMain({
                 onNavigateToSession={onNavigateToSession}
                 onSessionEstablished={onSessionEstablished}
                 onShowSettings={onShowSettings}
+                onOpenSideChat={isClaude && selectedSession ? openSideChat : undefined}
                 showRawParameters={showRawParameters}
                 showThinking={showThinking}
                 sendByCtrlEnter={sendByCtrlEnter}
@@ -274,6 +303,7 @@ function WorkspaceMain({
           )}
         </div>
 
+        <div className={sideChatOpen ? 'hidden' : 'contents'}>
         <EditorSidebar
           editingFile={editingFile}
           isMobile={isMobile}
@@ -288,6 +318,15 @@ function WorkspaceMain({
           projectPath={selectedProject.path}
           fillSpace={activeTab === 'files'}
         />
+        </div>
+        {sideChatOpen && selectedSession && <div className="side-chat-dock">
+          <SideChatPanel key={selectedSession.id} parent={selectedSession} project={selectedProject}
+            ws={ws} sendMessage={sendMessage} draft={sideChat?.draft}
+            onClose={() => setSideChat(null)} onShowSettings={onShowSettings}
+            showThinking={showThinking} showRawParameters={showRawParameters} sendByCtrlEnter={sendByCtrlEnter}
+            onPromote={id => { setSideChat(null); onNavigateToSession(id); }}
+            onReturnReply={text => paletteOps.insertComposerText(`${t('sideChat.replyPrefix')}\n\n${text}`)}/>
+        </div>}
       </div>
     </div>
   );

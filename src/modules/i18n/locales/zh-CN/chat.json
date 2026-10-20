@@ -340,5 +340,18 @@
     "diffChanged": "差异已变化。请复制评论、取消后重新选择当前行。",
     "approvePlan": "批准计划 · 修改前询问",
     "revisePlan": "修改计划"
+  },
+  "sideChat": {
+    "title": "侧边对话",
+    "open": "打开侧边对话",
+    "close": "关闭侧边对话",
+    "openFull": "作为主对话打开",
+    "context": "带入打开时的主对话上下文，消息独立保存。项目文件仍共享。",
+    "loading": "正在准备对话上下文…",
+    "failed": "暂时无法打开侧边对话，请确认主对话已有保存的历史。",
+    "retry": "重试",
+    "returnReply": "将最新回答放入主对话草稿",
+    "replyPrefix": "侧边讨论的结论：",
+    "selectedContext": "关于这段内容："
   }
 }
