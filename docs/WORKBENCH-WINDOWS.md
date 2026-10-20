@@ -1,4 +1,4 @@
-# CloudCLI Workbench 0.1.0 — Windows x64
+# CloudCLI Workbench 0.1.1 — Windows x64
 
 An independent Windows desktop distribution of the WGeorgezzzz CloudCLI fork,
 based on upstream CloudCLI 1.37.5. It retains the upstream AGPL-3.0-or-later
@@ -6,7 +6,7 @@ license and notices.
 
 ## Install alongside an existing client
 
-Download `CloudCLI-Workbench-0.1.0-win-x64.exe` and `SHA256SUMS.txt` from this
+Download `CloudCLI-Workbench-0.1.1-win-x64.exe` and `SHA256SUMS.txt` from this
 release. The installer is currently **unsigned**. The package includes its own
 Node.js 22 runtime and backend dependencies; a global Node.js installation is
 not required to start the desktop app.
@@ -23,6 +23,8 @@ data are separate from an existing CloudCLI installation:
 - Preferred service port: **3016**, falling back to a free port if occupied
 
 The application only reuses a service with its own persisted installation ID.
+An older Workbench backend owning the same profile is never replaced or joined automatically during an upgrade; finish its work and stop that service first.
+
 An inherited `SERVER_PORT=3001`, `DATABASE_PATH`, upstream server URL or runtime
 path does not make it attach to another client. Installing does not launch the
 app automatically, replace the existing client or migrate its live database.
@@ -45,7 +47,7 @@ uninstalling its binaries; this installer does not migrate a running backend.
 Side conversations have server-owned parent/child relationships. Multiple side
 conversations can be created, selected, renamed, archived, restored and promoted
 to the main conversation list. Their inherited context is folded by default.
-Reopening from another browser reads the same relationships.
+Reopening from another browser reads the same relationships. Version 0.1.1 freezes the display boundary after the SDK copy completes, because the SDK can rewrite the copied final reply timestamp. Older side conversations without a reliable boundary keep their full history visible.
 
 Closing or archiving a side conversation does not stop its running work. Parent
 and child transcripts are independent, but project files are shared. “Return

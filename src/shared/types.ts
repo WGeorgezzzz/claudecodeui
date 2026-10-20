@@ -1865,6 +1865,8 @@ export type SideConversation = {
   id: string; parent_session_id: string; child_session_id: string; title: string;
   status: 'creating'|'active'|'archived'|'promoted'|'failed';
   context_cutoff: string; created_at: string; updated_at: string; error: string|null;
+  /** Only present when a reliable post-copy boundary was recorded; legacy history remains fully visible. */
+  context_frozen_at?: string|null;
 };
 /** A durable FIFO request displayed by the queue hook and panel; revisions reject stale edits. */
 export type QueuedConversationMessage = {

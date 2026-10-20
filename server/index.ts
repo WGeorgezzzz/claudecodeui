@@ -152,6 +152,7 @@ app.get('/health', (req, res) => {
         installMode,
         version: RUNNING_VERSION,
         distribution: process.env.CLOUDCLI_DISTRIBUTION || 'cloudcli',
+        workbenchVersion: process.env.CLOUDCLI_WORKBENCH_VERSION || null,
         instanceId: process.env.CLOUDCLI_INSTANCE_ID || null
     });
 });

@@ -33,13 +33,14 @@ export async function ensureWorkbenchIdentity(userDataPath) {
 
 /** LocalServerController derives owned paths after discarding unrelated inherited launch overrides.
  * Explicit provider paths are opt-in; an unconfigured installation uses its own Claude directory. */
-export function buildWorkbenchServerEnvironment({userDataPath,instanceId,port,settings={},inherited=process.env,bundledClaudePath,runtimeDirectory}) {
+export function buildWorkbenchServerEnvironment({userDataPath,instanceId,port,settings={},inherited=process.env,bundledClaudePath,runtimeDirectory,version}) {
   const environment={...inherited};
   const inheritedPath=Object.entries(environment).find(([key])=>key.toLowerCase()==='path')?.[1] || '';
   const discarded=new Set(['ELECTRON_RUN_AS_NODE','ELECTRON_NODE_PATH','ELECTRON_SERVER_ENTRY','DATABASE_PATH',
     'CLOUDCLI_LOCAL_SERVER_URL','CLOUDCLI_DESKTOP_LOCAL_SERVER_URL','ELECTRON_LOCAL_SERVER_URL',
     'CLOUDCLI_SERVER_PORT','CLOUDCLI_DESKTOP_LOCAL_SERVER_PORT','PORT','SERVER_PORT',
-    'CLAUDE_CONFIG_DIR','CLAUDE_CLI_PATH','CLOUDCLI_HOME','API_KEY','PATH','NODE_OPTIONS','NODE_PATH','NODE_ENV']
+    'CLAUDE_CONFIG_DIR','CLAUDE_CLI_PATH','CLOUDCLI_HOME','API_KEY','PATH','NODE_OPTIONS','NODE_PATH','NODE_ENV',
+    'CLOUDCLI_DISTRIBUTION','CLOUDCLI_INSTANCE_ID','CLOUDCLI_WORKBENCH_VERSION']
     .map(key=>key.toLowerCase()));
   for (const key of Object.keys(environment)) if(discarded.has(key.toLowerCase()))delete environment[key];
   const serviceHome=path.join(userDataPath,'server');
@@ -55,5 +56,6 @@ export function buildWorkbenchServerEnvironment({userDataPath,instanceId,port,se
     PATH:[runtimeDirectory,bundledClaudePath?path.dirname(bundledClaudePath):null,inheritedPath].filter(Boolean).join(path.delimiter),
     CLOUDCLI_DISTRIBUTION:'workbench',
     CLOUDCLI_INSTANCE_ID:instanceId,
+    CLOUDCLI_WORKBENCH_VERSION:version||'development',
   };
 }

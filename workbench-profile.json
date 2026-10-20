@@ -1,6 +1,6 @@
 {
   "productName": "CloudCLI Workbench",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "appId": "io.github.wgeorgezzzz.cloudcli-workbench",
   "protocol": "cloudcli-workbench",
   "storageFolder": "CloudCLI Workbench",

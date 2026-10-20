@@ -53,6 +53,8 @@ try {
   ownedServerPid=marker.pid;
   const identity=JSON.parse(await fs.readFile(path.join(profileDirectory,'workbench-instance.json'),'utf8'));
   assert.equal(health.instanceId,identity.id);
+  const product=JSON.parse(await fs.readFile(path.join(installDirectory,'resources','app','workbench-profile.json'),'utf8'));
+  assert.equal(health.workbenchVersion,product.version);
   const bundledClaude=path.join(installDirectory,'resources','app','node_modules','@anthropic-ai','claude-agent-sdk-win32-x64','claude.exe');
   const claudeVersion=execFileSync(bundledClaude,['--version'],{encoding:'utf8',timeout:15000,windowsHide:true,
     env:{...process.env,CLAUDE_CONFIG_DIR:path.join(profileDirectory,'providers','claude')}}).trim();
@@ -74,7 +76,7 @@ try {
   const forbidden=await fetch(base+'/api/message-queue?sessionId=none');
   assert.equal(forbidden.status,401);
   const record={
-    passed:true,distribution:health.distribution,portIsolated:marker.port!==3001,
+    passed:true,distribution:health.distribution,workbenchVersion:health.workbenchVersion,portIsolated:marker.port!==3001,
     identityMatched:true,existingDatabaseUnchanged:true,unrelatedServerRequests:sentinelRequests,
     authenticatedApi:authorized.status,unauthenticatedQueue:forbidden.status,frontendAsset:asset,claudeVersion,
   };

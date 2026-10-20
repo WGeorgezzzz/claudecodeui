@@ -41,7 +41,7 @@ test('discovery rejects a healthy unrelated server and requires the owned instan
   assert.notEqual(profile.appId,'ai.cloudcli.desktop');
   assert.notEqual(profile.protocol,'cloudcli');
   let instance='other';
-  const server=http.createServer((_request,response)=>{response.setHeader('content-type','application/json');response.end(JSON.stringify({status:'ok',distribution:'workbench',instanceId:instance}));});
+  const server=http.createServer((_request,response)=>{response.setHeader('content-type','application/json');response.end(JSON.stringify({status:'ok',distribution:'workbench',instanceId:instance,workbenchVersion:profile.version}));});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   try {
     const controller=new LocalServerController({appRoot:process.cwd(),settingsPath:path.join(os.tmpdir(),'unused-settings.json'),workbenchProfile:profile});
@@ -61,6 +61,30 @@ test('a packaged Workbench never falls back to an upstream download',async()=>{
       isPackaged:true,workbenchProfile:loadWorkbenchProfile(process.cwd())});
     await assert.rejects(controller.resolveServerEntry(),/bundle is missing/);
   } finally {
+    assert.ok(path.resolve(root).startsWith(path.resolve(os.tmpdir())+path.sep));
+    await fs.rm(root,{recursive:true,force:true});
+  }
+});
+
+test('an older owned backend is not replaced or joined during an upgrade',async()=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'workbench-upgrade-'));
+  const server=http.createServer((_request,response)=>{response.setHeader('content-type','application/json');response.end(JSON.stringify({
+    status:'ok',distribution:'workbench',instanceId:'owned',workbenchVersion:'0.0.0',
+  }));});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try {
+    await fs.mkdir(path.join(root,'server'));
+    await fs.writeFile(path.join(root,'server','local-server.json'),JSON.stringify({port:server.address().port}));
+    const controller=new LocalServerController({appRoot:process.cwd(),settingsPath:path.join(root,'settings.json'),
+      userDataPath:root,workbenchProfile:loadWorkbenchProfile(process.cwd())});
+    controller.instanceId='owned';
+    let spawned=false;
+    controller.startBundledServer=()=>{spawned=true;};
+    await assert.rejects(controller.resolveWorkbenchServerUrl(),/different Workbench version/);
+    assert.equal(spawned,false);
+    assert.equal(server.listening,true);
+  } finally {
+    await new Promise(resolve=>server.close(resolve));
     assert.ok(path.resolve(root).startsWith(path.resolve(os.tmpdir())+path.sep));
     await fs.rm(root,{recursive:true,force:true});
   }

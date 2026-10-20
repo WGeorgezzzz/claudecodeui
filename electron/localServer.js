@@ -446,6 +446,7 @@ export class LocalServerController {
       detached: true,
       env: this.workbenchProfile ? buildWorkbenchServerEnvironment({
         userDataPath:this.userDataPath,instanceId:this.instanceId,port,settings:this.desktopSettings,
+        version:this.workbenchProfile.version,
         bundledClaudePath:existsSync(nativeClaude)?nativeClaude:undefined,
         runtimeDirectory:this.isPackaged?path.join(this.appRoot,'runtime'):undefined,
       }) : {
@@ -556,7 +557,7 @@ export class LocalServerController {
       if (!['127.0.0.1','localhost'].includes(parsed.hostname) || parsed.protocol!=='http:') return false;
       const health=await requestJson(`${url}/health`);
       return health.ok && health.json?.status==='ok' && health.json?.distribution==='workbench'
-        && health.json?.instanceId===this.instanceId;
+        && health.json?.instanceId===this.instanceId && health.json?.workbenchVersion===this.workbenchProfile.version;
     } catch { return false; }
   }
 
@@ -564,15 +565,21 @@ export class LocalServerController {
     this.instanceId ||= await ensureWorkbenchIdentity(this.userDataPath);
     // Only this installation's marker can nominate an existing service.
     const marker=path.join(this.userDataPath,'server','local-server.json');
-    try {
-      const stored=JSON.parse(await fs.readFile(marker,'utf8'));
+    let stored;
+    try { stored=JSON.parse(await fs.readFile(marker,'utf8')); }
+    catch { /* A missing or malformed owned marker cannot nominate another service. */ }
+    if (stored) {
       const url=`http://${HOST}:${Number(stored.port)}`;
-      if (await this.isWorkbenchServer(url)) {
+      const health=await requestJson(`${url}/health`);
+      if (health.ok && health.json?.status==='ok' && health.json?.distribution==='workbench' && health.json?.instanceId===this.instanceId) {
+        if (health.json.workbenchVersion!==this.workbenchProfile.version) {
+          throw new Error('A different Workbench version still owns this profile. Finish its tasks and stop its service before upgrading. No running work was stopped.');
+        }
         this.localServerPort=Number(stored.port);
         this.appendStartupLog(`Reusing this Workbench installation at ${url}`);
         return url;
       }
-    } catch { /* Missing or stale owned marker: choose a free port without touching another server. */ }
+    }
     const entry=await this.resolveServerEntry();
     const port=await chooseServerPort(this.getServerBindHost(),this.workbenchProfile.defaultPort);
     this.localServerPort=port;

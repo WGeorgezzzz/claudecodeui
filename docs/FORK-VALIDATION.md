@@ -1,5 +1,49 @@
 # Fork validation — 2026-10-20
 
+## Workbench lifecycle and independent installer
+
+The server-managed side conversations, durable FIFO queue and independent
+Windows distribution were validated at source `2c01657098828fee16d4bee3d6b06c8725114797`.
+The later 0.1.1 patch fixes inherited-history display boundaries and refuses to
+reuse an older Workbench backend that still owns the installation profile.
+
+| Check | Observed result |
+| --- | --- |
+| Clean Windows CI frontend suite | 118 files, 802 tests passed |
+| Clean Windows CI lifecycle suite | 15 passed |
+| Clean Windows CI profile suite | 3 passed |
+| Local full backend suite | 761 cases: 745 passed, 10 failed, 6 skipped |
+| Unmodified upstream failure comparison | Same 10 failures; no new failures in the comparison |
+| Installed 0.1.0 package on Windows CI | Authenticated API, frontend assets, own profile and sentinel isolation passed |
+| Bundled Claude executable | Executed successfully; version 2.1.302 |
+| 0.1.1 local side-chat regression suite | 6 passed |
+| 0.1.1 local profile regression suite | 4 passed |
+| 0.1.1 TypeScript and production builds | Passed |
+| 0.1.1 browser inherited-context check | New side history folds, expands fully and folds again |
+
+The initial build is recorded in
+[Windows CI run 39411945055](https://github.com/WGeorgezzzz/claudecodeui/actions/runs/39411945055).
+Version 0.1.1 receives a separate clean Windows build and installed acceptance
+before its workflow publishes the release; its attached `installer-smoke.json`
+records the packaged version. The 0.1.0 release and assets remain preserved.
+
+Real Claude runs in an isolated test workspace verified two queued messages
+executing in FIFO order with the client socket closed, duplicate POST delivery
+producing one execution, independent side replies, multiple side conversations,
+rename/archive/restore/promotion, and a pending message completing after explicit
+resolution of an interrupted attempt. The crash-recovery boundary used an
+offline unconfirmed-attempt fixture followed by an actual test-service restart;
+it did not kill a live model request. The interrupted execution receipt remains
+retained after cancellation, and no automatic replay occurred.
+
+Browser acceptance discovered that the SDK rewrites the copied final reply's
+timestamp. Version 0.1.1 records the fold boundary after the copy completes.
+Existing side records without that reliable boundary display their full history.
+The final fold check used another port and a database snapshot after automatic
+approval rejected a test-service restart. The original client on port 3001 was
+not restarted or deployed to. Packaging acceptance does not establish model
+account setup, hosted cloud connectivity, or support for other operating systems.
+
 ## Side-chat and visual update
 
 The subsequent frontend update adds a separate side conversation and a neutral

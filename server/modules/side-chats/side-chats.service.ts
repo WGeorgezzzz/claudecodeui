@@ -41,11 +41,13 @@ export function createSideChatsService(
         try {
           const upToAnchorId=await completedAnchor(parentId);
           await fork(parentId,{title,upToAnchorId},reserved.child_session_id);
-          return sideChatsDb.update(userId,reserved.id,'active',title);
+          // The SDK can rewrite the copied final reply's timestamp while forking.
+          // Capture the display boundary after copying, before the child is exposed.
+          return sideChatsDb.update(userId,reserved.id,'active',title,null,new Date().toISOString());
         } catch (reason) {
           const child=sessionsDb.getSessionById(reserved.child_session_id);
           if (child?.forked_from_session_id===parentId) {
-            return sideChatsDb.update(userId,reserved.id,'active',title);
+            return sideChatsDb.update(userId,reserved.id,'active',title,null,new Date().toISOString());
           }
           sideChatsDb.update(userId,reserved.id,'failed',title,(reason instanceof Error?reason.message:String(reason)).slice(0,1000));
           throw reason;

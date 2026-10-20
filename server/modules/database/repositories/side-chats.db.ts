@@ -10,7 +10,7 @@ export function initializeSideChatTables(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS side_chats (
       id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, parent_session_id TEXT NOT NULL,
       child_session_id TEXT NOT NULL UNIQUE, request_id TEXT NOT NULL, request_title TEXT NOT NULL, title TEXT NOT NULL,
-      status TEXT NOT NULL, context_cutoff TEXT NOT NULL, created_at TEXT NOT NULL,
+      status TEXT NOT NULL, context_cutoff TEXT NOT NULL, context_frozen_at TEXT, created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL, error TEXT, UNIQUE(user_id,request_id)
     );
     CREATE INDEX IF NOT EXISTS idx_side_chats_parent ON side_chats(user_id,parent_session_id,created_at);
@@ -19,6 +19,9 @@ export function initializeSideChatTables(db: Database.Database): void {
   if (!columns.some(column=>column.name==='request_title')) {
     db.exec("ALTER TABLE side_chats ADD COLUMN request_title TEXT NOT NULL DEFAULT ''");
     db.exec("UPDATE side_chats SET request_title=title WHERE request_title=''");
+  }
+  if (!columns.some(column=>column.name==='context_frozen_at')) {
+    db.exec('ALTER TABLE side_chats ADD COLUMN context_frozen_at TEXT');
   }
 }
 
@@ -44,9 +47,9 @@ export const sideChatsDb = {
       VALUES(?,?,?,?,?,?,?,'creating',?,?,?)`).run(id,userId,parentId,childId,requestId,title,title,contextCutoff??now,now,now);
     return this.get(userId,id)!;
   },
-  update(userId: number, id: string, status: SideChatRecord['status'], title: string, error: string|null = null): SideChatRecord {
-    getConnection().prepare('UPDATE side_chats SET status=?,title=?,error=?,updated_at=? WHERE user_id=? AND id=?')
-      .run(status,title,error,new Date().toISOString(),userId,id);
+  update(userId: number, id: string, status: SideChatRecord['status'], title: string, error: string|null = null, contextFrozenAt?: string): SideChatRecord {
+    getConnection().prepare('UPDATE side_chats SET status=?,title=?,error=?,updated_at=?,context_frozen_at=COALESCE(?,context_frozen_at) WHERE user_id=? AND id=?')
+      .run(status,title,error,new Date().toISOString(),contextFrozenAt??null,userId,id);
     return this.get(userId,id)!;
   },
   recover(): void {

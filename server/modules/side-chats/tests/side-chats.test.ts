@@ -100,3 +100,17 @@ test('legacy adoption verifies the actual parent and does not accept arbitrary s
   assert.throws(()=>service.adopt(userId,'wrong-parent','legacy-child'),/verified fork/);
   assert.throws(()=>service.adopt(userId+1,'parent','legacy-child'),/another owner/);
 }));
+
+test('the display boundary is frozen after copied timestamps and survives later renaming',()=>fixture(async(userId,root)=>{
+  let copyFinished=0;
+  const service=createSideChatsService(fakeFork(root,async()=>{
+    await new Promise(resolve=>setTimeout(resolve,10));
+    copyFinished=Date.now();
+  }));
+  const created=await service.create(userId,input);
+  assert.ok(created.context_frozen_at);
+  assert.ok(Date.parse(created.context_frozen_at!)>=copyFinished);
+  assert.ok(Date.parse(created.context_frozen_at!)>Date.parse(created.context_cutoff));
+  const renamed=await service.update(userId,created.id,{title:'Later title'});
+  assert.equal(renamed.context_frozen_at,created.context_frozen_at);
+}));

@@ -29,7 +29,7 @@ export type AnyRecord = Record<string, any>;
 export type SideChatRecord = {
   id: string; user_id: number; parent_session_id: string; child_session_id: string;
   request_id: string; request_title: string; title: string; status: 'creating'|'active'|'archived'|'promoted'|'failed';
-  context_cutoff: string; created_at: string; updated_at: string; error: string|null;
+  context_cutoff: string; context_frozen_at: string|null; created_at: string; updated_at: string; error: string|null;
 };
 /** One durable FIFO submission. Request IDs deduplicate transport retries; revision protects
  * pending edits. Failed/interrupted heads block later submissions until an explicit retry/cancel. */

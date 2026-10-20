@@ -157,7 +157,7 @@ export function SideChatPanel({parent,project,ws,sendMessage,draft,onDraftConsum
     {loading?<div role="status" className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin"/>{t('sideChat.loading')}</div>
       :selected?<div className="min-h-0 flex-1"><ChatInterface key={selected.child_session_id} isSideChat isActive
         selectedProject={project} selectedSession={session}
-        contextCutoff={selected.context_cutoff} ws={ws} sendMessage={sendMessage} onShowSettings={onShowSettings}
+        contextCutoff={selected.context_frozen_at||undefined} ws={ws} sendMessage={sendMessage} onShowSettings={onShowSettings}
         onNavigateToSession={onPromote} draftInsertion={draft} onDraftInserted={onDraftConsumed} onReturnReply={onReturnReply}
         showThinking={showThinking} showRawParameters={showRawParameters} sendByCtrlEnter={sendByCtrlEnter}/></div>
       :<div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-muted-foreground">
