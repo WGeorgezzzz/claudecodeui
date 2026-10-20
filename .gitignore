@@ -117,6 +117,10 @@ CLAUDE.md
 *.db
 *.sqlite
 *.sqlite3 
+*.db-wal
+*.db-shm
+/.verification/
+/.tmp-*
 
 logs
 dev-debug.log

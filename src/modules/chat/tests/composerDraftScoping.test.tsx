@@ -43,14 +43,14 @@ vi.mock('@/shared/api', () => {
   };
 });
 
-const renderComposer = (selectedSession: ProjectSession | null) => renderHook(
+const renderComposer = (selectedSession: ProjectSession | null, cyclePermissionMode = () => undefined) => renderHook(
   ({ session }: { session: ProjectSession | null }) => useChatComposerState({
     selectedProject: PROJECT,
     selectedSession: session,
     currentSessionId: session?.id ?? null,
     provider: 'claude',
     permissionMode: 'default',
-    cyclePermissionMode: () => undefined,
+    cyclePermissionMode,
     resolvePermissionModeForProvider: () => 'default' as PermissionMode,
     currentProviderModel: 'test-model',
     currentProviderEffort: 'medium',
@@ -71,6 +71,18 @@ beforeEach(() => {
   // The drafts store is a module-level singleton, so its in-memory copy
   // outlives localStorage.clear() and would leak one test's drafts into the next.
   resetChatDrafts();
+});
+
+test('Claude only changes permission mode with Shift+Tab, not ordinary Tab', () => {
+  const cycle = vi.fn();
+  const view = renderComposer({id:'claude-keyboard'}, cycle);
+  const preventDefault = vi.fn();
+  act(() => view.result.current.handleKeyDown({key:'Tab',shiftKey:false,preventDefault,nativeEvent:{}} as never));
+  assert.equal(cycle.mock.calls.length,0);
+  assert.equal(preventDefault.mock.calls.length,0);
+  act(() => view.result.current.handleKeyDown({key:'Tab',shiftKey:true,preventDefault,nativeEvent:{}} as never));
+  assert.equal(cycle.mock.calls.length,1);
+  assert.equal(preventDefault.mock.calls.length,1);
 });
 
 test('a draft is stored under the open session, not the project', async () => {

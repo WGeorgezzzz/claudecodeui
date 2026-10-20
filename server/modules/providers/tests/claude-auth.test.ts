@@ -70,15 +70,17 @@ const withEnv = async (
 
 const withTempHome = async (fn: (homeDir: string) => Promise<void>) => {
   const homeDir = await mkdtemp(path.join(os.tmpdir(), 'claude-auth-test-'));
-  const originalHome = process.env.HOME;
-  process.env.HOME = homeDir;
+  const originalConfig = process.env.CLAUDE_CONFIG_DIR;
+  // Explicit configuration works on Windows too; HOME alone does not change
+  // os.homedir() there and would accidentally inspect the developer's login.
+  process.env.CLAUDE_CONFIG_DIR = path.join(homeDir, '.claude');
   try {
     await fn(homeDir);
   } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
+    if (originalConfig === undefined) {
+      delete process.env.CLAUDE_CONFIG_DIR;
     } else {
-      process.env.HOME = originalHome;
+      process.env.CLAUDE_CONFIG_DIR = originalConfig;
     }
     await rm(homeDir, { recursive: true, force: true });
   }

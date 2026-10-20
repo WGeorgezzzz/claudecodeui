@@ -1,4 +1,5 @@
 import { Loader2, MessageSquare } from 'lucide-react';
+import { Fragment } from 'react';
 import type { MouseEvent } from 'react';
 import type { TFunction } from 'i18next';
 
@@ -64,6 +65,8 @@ export default function SidebarRecentConversations({
   onRetry,
   t,
 }: SidebarRecentConversationsProps) {
+  const claudeConversations = conversations.filter(conversation => conversation.provider === 'claude');
+  const orderedConversations = [...claudeConversations, ...conversations.filter(conversation => conversation.provider !== 'claude')];
   if (isLoading && conversations.length === 0) {
     return <RecentConversationSkeleton />;
   }
@@ -106,7 +109,7 @@ export default function SidebarRecentConversations({
       </div>
 
       <div className="space-y-0.5">
-        {conversations.map((conversation) => {
+        {orderedConversations.map((conversation, index) => {
           const isSelected = String(selectedSession?.id ?? '') === conversation.sessionId;
           const age = formatCompactAge(conversation.lastActivity, currentTime);
           const hasBackgroundWork = sessionActions.backgroundSessionIds.has(conversation.sessionId);
@@ -131,6 +134,12 @@ export default function SidebarRecentConversations({
           };
 
           return (
+            <Fragment key={conversation.sessionId}>
+            {(index === 0 || index === claudeConversations.length) && (
+              <h3 className="px-2 pb-1 pt-3 text-[11px] font-semibold text-muted-foreground" data-provider-group={conversation.provider === 'claude' ? 'claude' : 'other'}>
+                {conversation.provider === 'claude' ? 'Claude' : t('sessions.otherProviders', 'Other chats')}
+              </h3>
+            )}
             <div key={conversation.sessionId} className="group relative">
               {/*
                 * Only the amber "needs attention" dot, and the spinner below. The
@@ -235,6 +244,7 @@ export default function SidebarRecentConversations({
                 t={t}
               />
             </div>
+            </Fragment>
           );
         })}
       </div>

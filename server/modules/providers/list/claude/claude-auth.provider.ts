@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import spawn from 'cross-spawn';
+import { getClaudeConfigDir } from '@/shared/index.js';
 
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
@@ -81,7 +82,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
    */
   private async loadSettingsEnv(): Promise<Record<string, unknown>> {
     try {
-      const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+      const settingsPath = path.join(getClaudeConfigDir(), 'settings.json');
       const content = await readFile(settingsPath, 'utf8');
       const settings = readObjectRecord(JSON.parse(content));
       return readObjectRecord(settings?.env) ?? {};
@@ -161,7 +162,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
     const missingCredentialsError = 'Claude CLI is not authenticated. Run claude /login or configure ANTHROPIC_API_KEY.';
 
     try {
-      const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
+      const credPath = path.join(getClaudeConfigDir(), '.credentials.json');
       const content = await readFile(credPath, 'utf8');
       const creds = readObjectRecord(JSON.parse(content)) ?? {};
       const oauth = readObjectRecord(creds.claudeAiOauth);

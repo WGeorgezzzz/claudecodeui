@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { getClaudeConfigDir } from '@/shared/index.js';
 
 import { readObjectRecord, readStringArray } from '@/shared/utils.js';
 
@@ -31,7 +32,7 @@ const userSettingsPath = (): string => {
   const configDirectory = process.env.CLAUDE_CONFIG_DIR?.trim();
   const baseDirectory = configDirectory && path.isAbsolute(configDirectory)
     ? configDirectory
-    : path.join(os.homedir(), '.claude');
+    : getClaudeConfigDir();
   return path.join(baseDirectory, 'settings.json');
 };
 

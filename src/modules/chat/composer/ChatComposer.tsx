@@ -33,6 +33,7 @@ import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequests
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
 import BackgroundSendDialog from '@/modules/chat/composer/BackgroundSendDialog';
+import { MonitorPanel } from '@/modules/chat/composer/MonitorPanel';
 import { ScheduleMessagePopover } from '@/modules/chat/composer/ScheduleMessagePopover';
 import { ScheduledMessageList } from '@/modules/chat/composer/ScheduledMessageList';
 import ComposerModelMenu from '@/modules/chat/composer/ComposerModelMenu';
@@ -44,6 +45,7 @@ type MentionableFile = {
 };
 
 type ChatComposerProps = {
+  monitorSessionId?: string | null;
   pendingPermissionRequests: PendingPermissionRequest[];
   handlePermissionDecision: (
     requestIds: string | string[],
@@ -124,6 +126,7 @@ type ChatComposerProps = {
  * model/permission popovers that drive the next turn.
  */
 export default function ChatComposer({
+  monitorSessionId,
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
@@ -263,8 +266,12 @@ export default function ChatComposer({
       ? t('input.hintText.updateQueued', { defaultValue: 'Enter to update queued message' })
       : t('input.hintText.queue', { defaultValue: 'Enter to queue your next message' })
     : sendByCtrlEnter
-      ? t('input.hintText.ctrlEnter')
-      : t('input.hintText.enter');
+      ? providerLabel === 'Claude'
+        ? t('input.hintText.claudeCtrlEnter', 'Ctrl+Enter to send · Shift+Enter for a new line · Shift+Tab for permissions')
+        : t('input.hintText.ctrlEnter')
+      : providerLabel === 'Claude'
+        ? t('input.hintText.claudeEnter', 'Enter to send · Shift+Enter for a new line · Shift+Tab for permissions')
+        : t('input.hintText.enter');
   const submitAriaLabel = canQueueDraft
     ? hasQueuedDraft
       ? t('input.queue.update', { defaultValue: 'Update queued message' })
@@ -483,12 +490,14 @@ export default function ChatComposer({
           </PromptInputTools>
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {providerLabel.toLowerCase().includes('claude') && <MonitorPanel sessionId={monitorSessionId ?? null} draft={input} options={{model,effort,permissionMode}} />}
             <ScheduleMessagePopover
               disabled={!input.trim()}
               onSchedule={onScheduleMessage}
             />
 
             <ComposerModelMenu
+              providerLabel={providerLabel}
               effort={effort}
               effortOptions={availableEffortOptions}
               onSelectEffort={onSelectEffort}

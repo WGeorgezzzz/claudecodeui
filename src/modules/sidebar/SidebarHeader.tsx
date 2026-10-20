@@ -1,12 +1,13 @@
 import { FolderPlus, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { Button, Input } from '@/shared/ui';
+import { Button, Input, LLMProviderLogo } from '@/shared/ui';
 import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '@/shared/constants';
 import { IS_PLATFORM } from '@/shared/utils';
 import type { SidebarSearchMode } from '@/shared/types';
 import GitHubStarBadge from '@/modules/sidebar/GitHubStarBadge';
 import SidebarModeTabs from '@/modules/sidebar/SidebarModeTabs';
+import { MonitorDashboard } from '@/modules/sidebar/MonitorDashboard';
 
 const MOD_KEY =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
@@ -27,6 +28,7 @@ type SidebarHeaderProps = {
   onRefresh: () => void;
   isRefreshing: boolean;
   onCreateProject: () => void;
+  onNewClaudeSession?: () => void;
   onCollapseSidebar: () => void;
   t: TFunction;
 };
@@ -67,6 +69,7 @@ export default function SidebarHeader({
   onRefresh,
   isRefreshing,
   onCreateProject,
+  onNewClaudeSession,
   onCollapseSidebar,
   t,
 }: SidebarHeaderProps) {
@@ -135,7 +138,14 @@ export default function SidebarHeader({
           </div>
         </div>
 
-        <GitHubStarBadge />
+        {onNewClaudeSession ? (
+          <Button className="mt-3 h-9 w-full justify-start gap-2 rounded-xl" onClick={onNewClaudeSession}>
+            <LLMProviderLogo provider="claude" className="h-4 w-4" />
+            {t('sessions.newClaude', 'New Claude chat')}
+            <Plus className="ml-auto h-4 w-4" />
+          </Button>
+        ) : <GitHubStarBadge />}
+        <MonitorDashboard />
 
         {/* Search bar */}
         {showSearchTools && (
@@ -217,7 +227,14 @@ export default function SidebarHeader({
           </div>
         </div>
 
+        {onNewClaudeSession && (
+          <Button className="mt-3 h-10 w-full justify-start gap-2 rounded-xl" onClick={onNewClaudeSession}>
+            <LLMProviderLogo provider="claude" className="h-4 w-4" />
+            {t('sessions.newClaude', 'New Claude chat')}
+          </Button>
+        )}
         {/* Mobile search */}
+        <MonitorDashboard />
         {showSearchTools && (
           <div className="mt-2.5 space-y-2">
             <SidebarModeTabs

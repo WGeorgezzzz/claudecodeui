@@ -132,7 +132,9 @@
       "ctrlEnter": "Ctrl+Enter 发送 • Shift+Enter 换行 • Tab 切换模式 • / 斜杠命令",
       "enter": "Enter 发送 • Shift+Enter 换行 • Tab 切换模式 • / 斜杠命令",
       "queue": "Enter 排队发送下一条消息",
-      "updateQueued": "Enter 更新排队消息"
+      "updateQueued": "Enter 更新排队消息",
+      "claudeEnter": "Enter 发送 · Shift+Enter 换行 · Shift+Tab 切换权限",
+      "claudeCtrlEnter": "Ctrl+Enter 发送 · Enter 换行 · Shift+Tab 切换权限"
     },
     "clickToChangeMode": "点击更改权限模式（或在输入框中按 Tab）",
     "showAllCommands": "显示所有命令",
@@ -145,7 +147,8 @@
       "willSend": "将在当前完成后发送",
       "edit": "编辑排队消息",
       "delete": "删除排队消息"
-    }
+    },
+    "claudeChangeMode": "切换 Claude 权限（Shift+Tab）"
   },
   "providerSelection": {
     "title": "选择您的 AI 助手",
@@ -165,7 +168,9 @@
       "default": "请在上方选择一个提供者以开始"
     },
     "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜索会话、文件和提交",
-    "chooseModelDescriptionCustomOnly": "{{providers, list}} 仅列出您的模型"
+    "chooseModelDescriptionCustomOnly": "{{providers, list}} 仅列出您的模型",
+    "claudeTitle": "今天想一起完成什么？",
+    "claudeDescription": "让 Claude 帮你理解项目、修改代码或处理任务。"
   },
   "session": {
     "continue": {
@@ -304,5 +309,36 @@
     "customModelsOnlyHint": "在所有模型选择器中隐藏 {{provider}} 的内置模型，并将您的第一个模型设为默认模型。在您添加模型之前，内置模型仍会显示。",
     "builtInModelsHidden": "开启“仅使用我的模型”时，这些模型不会出现在模型选择器中。",
     "customModelsOnlyFailed": "无法更改此设置。"
+  },
+  "claudeModes": {
+    "modes": {
+      "default": "询问权限",
+      "acceptEdits": "自动编辑",
+      "plan": "计划模式",
+      "auto": "自动判断",
+      "bypassPermissions": "跳过权限确认"
+    },
+    "descriptions": {
+      "default": "按需要请求工具权限，使用已有授权规则。",
+      "acceptEdits": "自动批准工作区文件编辑和常见文件操作；其他调用仍按权限规则处理。",
+      "plan": "分析和制定计划，不执行修改。",
+      "auto": "由权限分类器判断工具调用，仍可能拒绝操作。",
+      "bypassPermissions": "跳过工具权限确认；仅对可信环境使用。"
+    }
+  },
+  "desktop": {
+    "sideBySide": "并排显示",
+    "showThinking": "显示思考",
+    "showParameters": "显示工具参数",
+    "closePane": "关闭面板",
+    "terminal": "终端",
+    "changes": "变更",
+    "commentLine": "评论 {{file}} 第 {{line}} 行（{{side}}）",
+    "reviewComment": "审查意见",
+    "addReviewToDraft": "加入 Claude 草稿",
+    "cancelComment": "取消",
+    "diffChanged": "差异已变化。请复制评论、取消后重新选择当前行。",
+    "approvePlan": "批准计划 · 修改前询问",
+    "revisePlan": "修改计划"
   }
 }

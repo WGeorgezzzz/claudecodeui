@@ -327,6 +327,10 @@ async function handleChatEditSend(
 
   const { sessionId, session, provider } = resolved;
   const anchorId = typeof data.anchorId === 'string' ? data.anchorId.trim() : '';
+  if (provider === 'claude' && dependencies.runtime.hasBackgroundWork(sessionId)) {
+    sendProtocolError(ws, 'BACKGROUND_WORK_ACTIVE', 'Wait for background work to finish before editing an earlier message. You can still send a new message.', sessionId);
+    return;
+  }
   if (!anchorId) {
     sendProtocolError(ws, 'ANCHOR_REQUIRED', 'chat.edit-send requires the anchorId of the message being replaced.', sessionId);
     return;

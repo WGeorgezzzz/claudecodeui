@@ -40,16 +40,18 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
   showRawParameters = false,
   rawContent,
   toolName: _toolName,
+  toolId,
 }) => {
   const { t } = useTranslation();
   const permissionCtx = usePermission();
 
   const pendingRequest = permissionCtx?.pendingPermissionRequests.find(
-    (r) => r.toolName === 'ExitPlanMode' || r.toolName === 'exit_plan_mode'
+    (r) => (r.toolName === 'ExitPlanMode' || r.toolName === 'exit_plan_mode') && (!r.toolId || r.toolId === toolId)
   );
 
   const handleBuild = () => {
     if (pendingRequest && permissionCtx) {
+      permissionCtx.onPlanApproved?.();
       permissionCtx.handlePermissionDecision(pendingRequest.requestId, { allow: true });
     }
   };
@@ -126,13 +128,10 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
               onClick={handleRevise}
               className="text-muted-foreground"
             >
-              Revise
+              {t('chat:desktop.revisePlan','Revise plan')}
             </Button>
             <Button size="sm" onClick={handleBuild}>
-              Build{' '}
-              <kbd className="ml-1 rounded bg-primary-foreground/20 px-1 py-0.5 font-mono text-[10px]">
-                ⌘↩
-              </kbd>
+              {t('chat:desktop.approvePlan','Approve plan · ask before changes')}
             </Button>
           </CardFooter>
         )}

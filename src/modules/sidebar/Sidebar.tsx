@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
+import { writeSelectedProvider } from '@/shared/selectedProvider';
 import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
 import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
 import { useSidebarController } from '@/modules/sidebar/hooks/useSidebarController';
@@ -342,6 +343,11 @@ function Sidebar({
             }}
             isRefreshing={isRefreshing}
             onCreateProject={() => setShowNewProject(true)}
+            onNewClaudeSession={() => {
+              writeSelectedProvider('claude');
+              if (selectedProject) onNewSession(selectedProject);
+              else setShowNewProject(true);
+            }}
             onCollapseSidebar={handleCollapseSidebar}
             updateAvailable={updateAvailable}
             restartRequired={restartRequired}

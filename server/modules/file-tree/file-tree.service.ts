@@ -478,10 +478,13 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       };
     },
 
-    async saveTextFile(projectId, filePath, content) {
+    async saveTextFile(projectId, filePath, content, expectedContent) {
       const projectRoot = await resolveProjectRoot(projectId);
       const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
       try {
+        if (expectedContent !== undefined && await fileSystem.readTextFile(resolvedPath) !== expectedContent) {
+          throw createFileTreeError('File changed on disk. Your edits were kept in the editor. Copy them before reopening the file to review the latest version.', 409, 'FILE_CHANGED');
+        }
         await fileSystem.writeTextFile(resolvedPath, content);
       } catch (error) {
         mapFileSystemError(error, {

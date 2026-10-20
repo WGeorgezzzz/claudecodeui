@@ -145,7 +145,9 @@
       "ctrlEnter": "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "queue": "Enter to queue your next message",
-      "updateQueued": "Enter to update queued message"
+      "updateQueued": "Enter to update queued message",
+      "claudeEnter": "Enter to send · Shift+Enter for a new line · Shift+Tab for permissions",
+      "claudeCtrlEnter": "Ctrl+Enter to send · Enter for a new line · Shift+Tab for permissions"
     },
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
     "showAllCommands": "Show all commands",
@@ -158,7 +160,8 @@
       "willSend": "Will send when this finishes",
       "edit": "Edit queued message",
       "delete": "Delete queued message"
-    }
+    },
+    "claudeChangeMode": "Change Claude permissions (Shift+Tab)"
   },
   "composer": {
     "reasoning": "Reasoning",
@@ -199,7 +202,9 @@
     "manageModels": "Manage models",
     "noModelsFound": "No models found.",
     "loadingModels": "Loading models…",
-    "clickToChange": "Click to change model"
+    "clickToChange": "Click to change model",
+    "claudeTitle": "What would you like to work on?",
+    "claudeDescription": "Ask Claude to explore your project, make a change, or help with a task."
   },
   "session": {
     "continue": {
@@ -403,5 +408,36 @@
     "customModelsOnlyHint": "Hide the built-in {{provider}} models from every model picker and make your first model the default. Built-in models stay listed until you add a model.",
     "builtInModelsHidden": "Hidden from model pickers while “Use only my models” is on.",
     "customModelsOnlyFailed": "Unable to change this setting."
+  },
+  "claudeModes": {
+    "modes": {
+      "default": "Ask permissions",
+      "acceptEdits": "Accept edits",
+      "plan": "Plan mode",
+      "auto": "Auto",
+      "bypassPermissions": "Bypass permissions"
+    },
+    "descriptions": {
+      "default": "Ask for tool permissions as needed, respecting existing rules.",
+      "acceptEdits": "Automatically approve workspace file edits and common filesystem operations; other calls follow permission rules.",
+      "plan": "Analyze and plan without making changes.",
+      "auto": "Let the permission classifier decide; actions may still be denied.",
+      "bypassPermissions": "Skip tool permission checks. Use only in a trusted environment."
+    }
+  },
+  "desktop": {
+    "sideBySide": "Side by side",
+    "showThinking": "Show thinking",
+    "showParameters": "Show tool parameters",
+    "closePane": "Close pane",
+    "terminal": "Terminal",
+    "changes": "Changes",
+    "commentLine": "Comment on {{file}} line {{line}} ({{side}})",
+    "reviewComment": "Review comment",
+    "addReviewToDraft": "Add to Claude draft",
+    "cancelComment": "Cancel",
+    "diffChanged": "The diff changed. Copy your comment, cancel, and select the current line again.",
+    "approvePlan": "Approve plan · ask before changes",
+    "revisePlan": "Revise plan"
   }
 }

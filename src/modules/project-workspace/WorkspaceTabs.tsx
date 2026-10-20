@@ -8,6 +8,7 @@ import type { AppTab } from '@/shared/types';
 import { usePlugins,PluginIcon } from '@/modules/plugins';
 
 type WorkspaceTabsProps = {
+  claudeLayout?: boolean;
   activeTab: AppTab;
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   shouldShowTasksTab: boolean;
@@ -54,6 +55,7 @@ const TASKS_TAB: BuiltInTab = {
 
 /** Rendered by WorkspaceHeader to show the built-in workspace tabs plus any enabled plugin tabs. */
 export default function WorkspaceTabs({
+  claudeLayout = false,
   activeTab,
   setActiveTab,
   shouldShowTasksTab,
@@ -107,7 +109,10 @@ export default function WorkspaceTabs({
     >
       {tabs.map((tab, index) => {
         const isActive = tab.id === activeTab;
-        const displayLabel = tab.kind === 'builtin' ? t(tab.labelKey) : tab.label;
+        const displayLabel = tab.kind === 'builtin'
+          ? claudeLayout && tab.id === 'shell' ? t('chat:desktop.terminal', 'Terminal')
+            : claudeLayout && tab.id === 'git' ? t('chat:desktop.changes', 'Changes') : t(tab.labelKey)
+          : tab.label;
 
         return (
           <Fragment key={`${tab.id}-${index}`}>
@@ -121,7 +126,7 @@ export default function WorkspaceTabs({
                 aria-selected={isActive}
                 tabIndex={isActive ? 0 : -1}
                 isActive={isActive}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => setActiveTab(current => claudeLayout && current === tab.id && tab.id !== 'chat' ? 'chat' : tab.id)}
                 onKeyDown={handleTabKeyDown}
                 className="h-8 max-w-44 px-2.5 py-[5px]"
               >

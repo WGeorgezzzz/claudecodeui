@@ -18,7 +18,10 @@ import os from 'os';
 import path from 'path';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { getClaudeConfigFile } from '@/shared/index.js';
 
+import { createHeldPromptStream } from '@/modules/providers/list/claude/claude-prompt-stream.service.js';
+import { applyLiveClaudeSettings } from '@/modules/providers/list/claude/claude-live-settings.service.js';
 import {
   appendFilesInputTag,
   buildClaudeUserContent,
@@ -58,7 +61,9 @@ const abortedSessionIds = new Set();
 // entry, the abort flag, and all client-facing events belong to the new run.
 const supersededInstances = new WeakSet();
 
-const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
+// Like Desktop, leave permission prompts pending until the user answers or
+// cancels. An explicit operator timeout remains supported.
+const TOOL_APPROVAL_TIMEOUT_MS = Math.max(0, parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 0);
 
 // How long background work is allowed to keep running after a turn ends. This drives
 // two halves of the same behaviour:
@@ -321,7 +326,7 @@ function mapCliOptionsToSDK(options = {}) {
  * @param {Object} writer - WebSocket writer for reconnect support
  * @param {Function} releaseInput - Closes the held stdin stream so the CLI can exit
  */
-function addSession(sessionId, queryInstance, writer = null, releaseInput = null) {
+function addSession(sessionId, queryInstance, writer = null, releaseInput = null, continueTurn = null) {
   const existing = activeSessions.get(sessionId);
   // A different live instance under the same key means an earlier run was
   // superseded without being stopped (e.g. an abort that raced run setup and
@@ -352,7 +357,8 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
     status: 'active',
     writer,
     // Re-registered mid-run once the provider session id lands; keep the closer.
-    releaseInput: releaseInput || carried?.releaseInput || null
+    releaseInput: releaseInput || carried?.releaseInput || null,
+    continueTurn: continueTurn || carried?.continueTurn || null
   });
   // The history reader reports a background agent as running or stopped by
   // whether this entry exists, and the cached history does not see this map.
@@ -854,6 +860,7 @@ async function buildPromptMessages(command, images, files, cwd) {
 
   return [{
     type: 'user',
+    uuid: crypto.randomUUID(),
     message: {
       role: 'user',
       content
@@ -864,39 +871,13 @@ async function buildPromptMessages(command, images, files, cwd) {
 }
 
 /**
- * Wraps prompt messages in an async iterable that yields them and then parks.
- *
- * The SDK closes the CLI's stdin as soon as its input iterable is exhausted (and
- * immediately on `result` for string prompts). The CLI reads that EOF as the end
- * of the run and kills anything still going in the background, so the iterable
- * has to stay pending until we actually want the process gone.
- *
- * @param {Array<Object>} messages - SDKUserMessage records to send
- * @returns {{ stream: AsyncIterable, release: () => void }} Stream plus its closer
- */
-function createHeldPromptStream(messages) {
-  let release;
-  const held = new Promise((resolve) => { release = resolve; });
-
-  const stream = (async function* () {
-    for (const message of messages) {
-      yield message;
-    }
-    // Keeps stdin open — the CLI stays alive until release() is called.
-    await held;
-  })();
-
-  return { stream, release };
-}
-
-/**
  * Loads MCP server configurations from ~/.claude.json
  * @param {string} cwd - Current working directory for project-specific configs
  * @returns {Object|null} MCP servers object or null if none found
  */
 async function loadMcpConfig(cwd) {
   try {
-    const claudeConfigPath = path.join(os.homedir(), '.claude.json');
+    const claudeConfigPath = getClaudeConfigFile();
 
     // Check if config file exists
     try {
@@ -954,8 +935,20 @@ async function loadMcpConfig(cwd) {
  * @param {Object} context - Provider-scoped model, session, and auth lookups
  * @returns {Promise<void>}
  */
+const RESUME_AFTER_CLOSE = Symbol('resume-after-close');
+
 async function queryClaudeSDK(command, options = {}, ws, context) {
   const { sessionId, sessionSummary } = options;
+  const liveSession = sessionId ? getSession(sessionId) : null;
+  if (liveSession?.continueTurn) {
+    try {
+      const continuation = await liveSession.continueTurn(command, options, ws);
+      if (continuation !== RESUME_AFTER_CLOSE) return continuation;
+    } catch (error) {
+      ws.send(createNormalizedMessage({ kind: 'error', content: error.message, sessionId, provider: 'claude' }));
+      throw error;
+    }
+  }
   // Callers pass the stable app session id; the SDK only understands the
   // provider-native id recorded on the session row.
   const providerSessionId = context.resolveProviderSessionId(sessionId);
@@ -979,6 +972,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // stream exists; the finally block calls it no matter how the run ends.
   let releasePromptStream = () => {};
   let idleReleaseTimer = null;
+  let pendingContinuation = null;
+  let supportsTurnCorrelation = false;
   // The client is told the turn is over as soon as `result` lands, even though
   // the process lingers, so the UI never waits out the idle hold.
   let turnCompleteSent = false;
@@ -1019,6 +1014,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     }
     idleReleaseTimer = setTimeout(() => {
       idleReleaseTimer = null;
+      if (pendingContinuation) { scheduleRelease(); return; }
       releasePromptStream();
     }, BG_WAIT_CEILING_MS);
     // Never let the hold keep the server process alive on its own.
@@ -1028,6 +1024,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Hoisted above the try so the catch's cleanup can tell whether this run
   // still owns the activeSessions entry (or was superseded by a newer run).
   let queryInstance = null;
+  let markProcessSettled;
+  const processSettled = new Promise((resolve) => { markProcessSettled = resolve; });
 
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
@@ -1076,12 +1074,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }]
     };
 
-    // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
-    // at the permission-mode step and skips this callback, so interactive tools
-    // (AskUserQuestion, ExitPlanMode) won't reach the UI — the classifier/bypass
-    // auto-approves them and the model acts on a generated answer. Move these
-    // tools to a PreToolUse hook (runs before the mode check) if we need them
-    // to work in those modes.
+    // Interactive tools must retain the user's input surface. The installed
+    // CLI was verified to route AskUserQuestion here even in auto mode.
     sdkOptions.canUseTool = async (toolName, input, context) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 
@@ -1106,7 +1100,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
 
       const requestId = createRequestId();
-      ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolId: context?.toolUseID, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       emitNotification(createNotificationEvent({
         provider: 'claude',
         sessionId: sessionId || capturedSessionId || null,
@@ -1126,6 +1120,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           // approvals up directly; provider id only for legacy callers.
           _sessionId: sessionId || capturedSessionId || null,
           _toolName: toolName,
+          _toolId: context?.toolUseID,
           _input: input,
           _receivedAt: new Date(),
         },
@@ -1188,9 +1183,74 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       });
     }
 
+    const liveSettings = { model: options.model, effort: options.effort, permissionMode: options.permissionMode };
+    const continueTurn = async (nextCommand, nextOptions, nextWriter) => {
+      // A plain reply is visible before the SDK finishes closing its process.
+      // Wait for that owner to exit, then resume from its saved native session.
+      // A live background stream still follows the reuse path below.
+      if (!heldPrompt.isOpen() && turnCompleteSent && !pendingContinuation) {
+        let timeout;
+        try {
+          await Promise.race([processSettled, new Promise((_, reject) => {
+            timeout = setTimeout(() => reject(new Error('The previous Claude process has not closed yet. Please retry shortly.')), 30_000);
+          })]);
+        } finally {
+          clearTimeout(timeout);
+        }
+        return RESUME_AFTER_CLOSE;
+      }
+      if (nextOptions.resumeFromScratch || nextOptions.resumeAnchorId) {
+        throw new Error('Cannot rewind this conversation while its background process is active. Wait for background work to finish.');
+      }
+      if (!heldPrompt.isOpen() || !turnCompleteSent || pendingContinuation) {
+        throw new Error('This session is still processing or closing. Wait for the current response before sending again.');
+      }
+      if (!supportsTurnCorrelation) {
+        throw new Error('This Claude CLI does not identify which prompt a reply answers. Wait for background work to finish before sending another command.');
+      }
+      // Changing these requires a fresh query. Preserve the tasks instead.
+      for (const key of ['cwd', 'allowedTools', 'disallowedTools']) {
+        if (nextOptions[key] !== undefined && JSON.stringify(nextOptions[key]) !== JSON.stringify(options[key])) {
+          throw new Error('Wait for background work to finish before changing ' + key + '. The running tasks have been preserved.');
+        }
+      }
+      // Reserve before attachment IO, so a background completion cannot close stdin.
+      pendingContinuation = { resolve: null, reject: null, promptId: null };
+      if (idleReleaseTimer) { clearTimeout(idleReleaseTimer); idleReleaseTimer = null; }
+      let messages;
+      try {
+        messages = await buildPromptMessages(nextCommand, nextOptions.images, nextOptions.files, options.cwd);
+        await applyLiveClaudeSettings(
+          queryInstance, liveSettings, nextOptions,
+          resolveClaudeEffort(nextOptions.model ?? liveSettings.model ?? sdkOptions.model, nextOptions.effort, effortModels),
+          (mode) => { sdkOptions.permissionMode = mode; },
+        );
+      } catch (error) {
+        pendingContinuation = null;
+        scheduleRelease();
+        throw error;
+      }
+      if (!heldPrompt.isOpen()) {
+        pendingContinuation = null;
+        throw new Error('The Claude process closed before the new command could be sent.');
+      }
+      const completion = new Promise((resolve, reject) => {
+        pendingContinuation.resolve = resolve;
+        pendingContinuation.reject = reject;
+      });
+      pendingContinuation.promptId = messages[0].uuid;
+      ws = nextWriter;
+      const current = getSession(sessionKey());
+      if (current?.instance === queryInstance) current.writer = nextWriter;
+      turnCompleteSent = false;
+      assistantBudgetSent = false;
+      heldPrompt.push(messages);
+      return completion;
+    };
+
     // Track the query instance for abort capability
     if (sessionKey()) {
-      addSession(sessionKey(), queryInstance, ws, releasePromptStream);
+      addSession(sessionKey(), queryInstance, ws, releasePromptStream, continueTurn);
     }
 
     // Process streaming messages
@@ -1200,7 +1260,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(sessionKey(), queryInstance, ws, releasePromptStream);
+        addSession(sessionKey(), queryInstance, ws, releasePromptStream, continueTurn);
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -1292,6 +1352,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       // its own, which closing stdin now would cut short.
       if (
         heldForBackgroundWork
+        && turnCompleteSent
+        && !pendingContinuation
         && message.type === 'system'
         && message.subtype === 'task_notification'
         && message.status === 'stopped'
@@ -1302,12 +1364,19 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
 
       if (message.type === 'result') {
+        const answeredPrompts = message.user_message_uuids ?? [message.user_message_uuid];
+        if (answeredPrompts.includes(promptMessages[0].uuid)) supportsTurnCorrelation = true;
+        const answersContinuation = !pendingContinuation
+          || answeredPrompts.includes(pendingContinuation.promptId);
         // The turn is done as far as the client is concerned.
         const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
         const stillOutstanding = backgroundWork.hasOutstanding(sessionKey());
-        if (!turnCompleteSent && !abortPending) {
+        if (!turnCompleteSent && !abortPending && answersContinuation) {
           turnCompleteSent = true;
+          const completedContinuation = pendingContinuation;
+          pendingContinuation = null;
           ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
+          completedContinuation?.resolve?.();
           notifyRunStopped({
             userId: ws?.userId || null,
             provider: 'claude',
@@ -1345,7 +1414,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         const holdForTurn = sawTaskEventThisTurn ? stillOutstanding : backgroundWorkPending || stillOutstanding;
         backgroundWorkPending = false;
         sawTaskEventThisTurn = false;
-        if (holdForTurn) {
+        if (holdForTurn || pendingContinuation) {
           heldForBackgroundWork = true;
           scheduleRelease();
         } else {
@@ -1375,6 +1444,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // terminal `complete` (aborted: true) was already sent by abort-session, and
     // for runs that already reported completion when their `result` arrived.
     const wasAborted = !superseded && sessionKey() ? abortedSessionIds.delete(sessionKey()) : false;
+    if (pendingContinuation && !wasAborted && !superseded) {
+      throw new Error('The Claude process ended before the new command completed.');
+    }
     if (!turnCompleteSent && !superseded) {
       turnCompleteSent = true;
       if (!wasAborted) {
@@ -1433,6 +1505,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       error
     });
   } finally {
+    pendingContinuation?.reject?.(new Error('The Claude process ended before the new command completed.'));
+    pendingContinuation = null;
     // Always close stdin — otherwise an aborted or failed run leaves the CLI
     // process (and its MCP servers) alive until the server exits.
     if (idleReleaseTimer) {
@@ -1440,6 +1514,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       idleReleaseTimer = null;
     }
     releasePromptStream();
+    markProcessSettled();
   }
 }
 
@@ -1560,6 +1635,7 @@ function getPendingApprovalsForSession(sessionId) {
       pending.push({
         requestId,
         toolName: resolver._toolName || 'UnknownTool',
+        toolId: resolver._toolId,
         input: resolver._input,
         context: resolver._context,
         sessionId,

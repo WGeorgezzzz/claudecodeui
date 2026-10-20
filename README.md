@@ -1,3 +1,9 @@
+> **WGeorgezzzz workflow fork / Codex 工作流对标实验**
+>
+> 在上游 v1.37.5 基础上加入 Claude 会话记忆、可调并排工作区、本地文件预览、行级审阅、后台续聊及持久自动监测。
+> [功能对照与安装](docs/CODEX-PARITY.zh-CN.md) · [验证记录与已知限制](docs/FORK-VALIDATION.md)。
+> 保留上游作者和 AGPL-3.0-or-later 许可证；本 fork 不是 OpenAI 或 Anthropic 官方产品。
+
 <div align="center">
  <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
  <h1>Cloud CLI (aka Claude Code UI)</h1>

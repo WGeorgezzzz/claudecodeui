@@ -333,6 +333,8 @@ function ChatInterface({
       if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) {
         return;
       }
+      // A side pane's terminal/editor owns Escape; it must not stop the chat.
+      if (event.target instanceof Element && event.target.closest('[data-claude-side-pane], .cm-editor, [role="dialog"], [role="menu"]')) return;
 
       event.preventDefault();
       handleAbortSession();
@@ -396,7 +398,8 @@ function ChatInterface({
   const permissionContextValue = useMemo(() => ({
     pendingPermissionRequests,
     handlePermissionDecision,
-  }), [pendingPermissionRequests, handlePermissionDecision]);
+    onPlanApproved: provider === 'claude' ? () => selectPermissionMode('default') : undefined,
+  }), [pendingPermissionRequests, handlePermissionDecision, provider, selectPermissionMode]);
 
   // Lets markdown image paths in the transcript resolve against this project.
   const markdownWorkspaceValue = useMemo(() => ({
@@ -556,6 +559,7 @@ function ChatInterface({
           isEditingSentMessage={Boolean(editingAnchorId)}
           onCancelEditMessage={cancelEditMessage}
           scheduledMessages={scheduledMessages}
+          monitorSessionId={provider === 'claude' ? (currentSessionId || selectedSession?.id || null) : null}
           onScheduleMessage={handleScheduleMessage}
           onCancelScheduledMessage={cancelScheduledMessage}
           slashCommandsCount={slashCommandsCount}

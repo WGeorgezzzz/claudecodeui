@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { createContext, memo, useContext, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { MermaidDiagram } from '@/modules/code-editor';
 import { MarkdownImage } from '@/modules/chat/transcript/MarkdownImage';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
+import { isInlineFileReference, localFileUrlTransform, parseLocalFileLink } from '@/modules/chat/utils/localFileLink';
 import { normalizeLatexDelimiters } from '@/modules/chat/utils/latexDelimiters';
 import { copyTextToClipboard } from '@/shared/utils';
 import { SyntaxHighlighter } from '@/shared/syntaxHighlighter';
@@ -32,11 +33,6 @@ const isExternalHref = (href?: string): boolean =>
 // Read the trailing `:line` / `:line:col` suffix so the editor can reveal it.
 // Both this and stripLineSuffix are anchored at the end, so callers pass an
 // already-trimmed reference.
-const lineFromRef = (value: string): number | null => {
-  const match = value.match(/:(\d+)(?::\d+)?$/);
-  return match ? Number(match[1]) : null;
-};
-
 // Strip a trailing `:line` / `:line:col` suffix (e.g. `src/foo.ts:130`).
 const stripLineSuffix = (value: string): string => value.replace(/:\d+(?::\d+)?$/, '');
 
@@ -82,10 +78,15 @@ type CodeBlockProps = {
   forceBlock?: boolean;
 };
 
+// Prevent auto-linking code used as the label of an existing Markdown link.
+const InsideMarkdownLink = createContext(false);
+
 // `node` is destructured out so react-markdown's hast node never reaches the DOM.
 const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: CodeBlockProps) => {
   const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
+  const insideLink=useContext(InsideMarkdownLink);
+  const {openFileInEditor}=usePaletteOps();
   // Fenced blocks carry a trailing newline in the tree; trim it so the
   // highlighter doesn't render an empty final line.
   const raw = (Array.isArray(children) ? children.join('') : String(children ?? '')).replace(/\n$/, '');
@@ -94,6 +95,10 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
   const shouldInline = !forceBlock && !/[\r\n]/.test(raw);
 
   if (shouldInline) {
+    if(!insideLink && isInlineFileReference(raw)) {
+      return <a href="#" title="在右侧预览本地文件" className="cursor-pointer whitespace-pre-wrap break-words rounded-md border border-primary/20 bg-primary/5 px-1.5 py-0.5 font-mono text-[0.875em] text-blue-600 underline decoration-blue-400/50 underline-offset-2 hover:bg-primary/10 dark:text-blue-400"
+        onClick={event=>{event.preventDefault();const ref=parseLocalFileLink(raw);openFileInEditor(ref.path,ref.line);}}>{children}</a>;
+    }
     return (
       <code
         className={`whitespace-pre-wrap break-words rounded-md border border-border/70 bg-muted px-1.5 py-0.5 font-mono text-[0.875em] text-foreground ${className || ''
@@ -305,15 +310,15 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
                 // trimmed from the parser, but the link-text fallback keeps a
                 // trailing space (``[`src/foo.ts:12` ]()``), and that space
                 // defeats the `$`-anchored suffix strip.
-                const reference = fileRef.trim();
-                if (reference.endsWith('/')) {
-                  openDirectory(reference);
+                const reference = parseLocalFileLink(fileRef);
+                if (reference.path.endsWith('/')) {
+                  openDirectory(reference.path);
                   return;
                 }
-                openFileInEditor(stripLineSuffix(reference), lineFromRef(reference));
+                openFileInEditor(reference.path, reference.line);
               }}
             >
-              {linkChildren}
+              <InsideMarkdownLink.Provider value={true}>{linkChildren}</InsideMarkdownLink.Provider>
             </a>
           );
         }
@@ -325,7 +330,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
             target="_blank"
             rel="noopener noreferrer"
           >
-            {linkChildren}
+            <InsideMarkdownLink.Provider value={true}>{linkChildren}</InsideMarkdownLink.Provider>
           </a>
         );
       },
@@ -334,7 +339,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
   );
 
   return (
-    <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components as any}>
+    <ReactMarkdown urlTransform={localFileUrlTransform} remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components as any}>
       {content}
     </ReactMarkdown>
   );

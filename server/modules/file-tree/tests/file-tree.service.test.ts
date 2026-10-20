@@ -531,3 +531,27 @@ test('reading through a symlink out of the temp directory is still refused', asy
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
   }
 });
+
+
+test('saving an externally changed file rejects without overwriting either version', async () => {
+  let written = false;
+  const root = path.resolve('conflict-test');
+  const service = createFileTreeService(createDependencies(createFakeFileSystem({
+    readTextFile: async () => 'external change',
+    writeTextFile: async () => { written = true; },
+  }), root));
+  await assert.rejects(service.saveTextFile('project-1','a.txt','my edit','original'),
+    (error: unknown) => error instanceof AppError && error.statusCode===409 && error.code==='FILE_CHANGED');
+  assert.equal(written,false);
+});
+
+test('saving an unchanged file accepts the exact original text including CRLF', async () => {
+  const root = path.resolve('conflict-test');
+  let saved = '';
+  const service = createFileTreeService(createDependencies(createFakeFileSystem({
+    readTextFile: async () => 'one\r\ntwo',
+    writeTextFile: async (_path, text) => { saved = text; },
+  }), root));
+  await service.saveTextFile('project-1','a.txt','edited','one\r\ntwo');
+  assert.equal(saved,'edited');
+});

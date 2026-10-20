@@ -75,6 +75,8 @@ export const useEditorSidebar = ({
         diffInfo,
         line,
       });
+      // Clicking a chat link should restore the dock even if the last file was expanded.
+      if (!diffInfo) setEditorExpanded(false);
       return true;
     },
     [selectedProject?.projectId, t],

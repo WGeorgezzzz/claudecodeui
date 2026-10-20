@@ -11,6 +11,7 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
 import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
+import { subscribeToUserPreferences } from '@/shared/userSettings';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
   // Superset used only before the model catalog loads; `ultracode` belongs to the
@@ -124,7 +125,7 @@ const getSessionSelectionKey = (provider: LLMProvider, sessionId: string): strin
   `${provider}:${sessionId}`
 );
 
-export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
+export function useChatProviderState({ selectedSession, selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   // The provider the composer sends under. Held here rather than read from
@@ -394,21 +395,36 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     }
   }, [providerEfforts, providerModels, reconcileStoredEffort]);
 
+  const folderPermissionKey = provider === 'claude' && selectedProject
+    ? `permissionMode-folder-claude:${encodeURIComponent(selectedProject.fullPath || selectedProject.projectId)}`
+    : null;
+  // Carries a mode chosen before the new conversation receives its session id.
+  // Plan is session-only and must never become the next conversation's default.
+  const newChatPermissionRef = useRef<{folder: string | null; mode: PermissionMode} | null>(null);
   useEffect(() => {
     const validModes = getPermissionModesForProvider(provider);
     const sessionSavedMode = selectedSession?.id
       ? (localStorage.getItem(`permissionMode-${selectedSession.id}`) as PermissionMode | null)
       : null;
-    // Fall back to the last mode picked for this provider: a brand-new chat
-    // only receives its session id after the first send, so without this the
-    // mode chosen beforehand would snap back to the default as soon as the
-    // session id appears.
-    const providerSavedMode = localStorage.getItem(`permissionMode-last-${provider}`) as PermissionMode | null;
-    const savedMode = [sessionSavedMode, providerSavedMode].find(
+    // A live session wins over the folder preference. Legacy provider choices
+    // remain a fallback, except that Plan must not leak into a new Claude chat.
+    const legacyMode = localStorage.getItem(`permissionMode-last-${provider}`) as PermissionMode | null;
+    const providerSavedMode = provider === 'claude' && legacyMode === 'plan' ? null : legacyMode;
+    const folderMode = folderPermissionKey ? localStorage.getItem(folderPermissionKey) as PermissionMode | null : null;
+    const pendingMode = newChatPermissionRef.current?.folder === folderPermissionKey
+      && (!selectedSession?.__provider || selectedSession.__provider === provider)
+      ? newChatPermissionRef.current?.mode : null;
+    if (selectedSession?.id && pendingMode) {
+      localStorage.setItem(`permissionMode-${selectedSession.id}`, pendingMode);
+      newChatPermissionRef.current = null;
+    } else if (newChatPermissionRef.current?.folder !== folderPermissionKey) {
+      newChatPermissionRef.current = null;
+    }
+    const savedMode = [sessionSavedMode, pendingMode, folderMode, providerSavedMode].find(
       (mode): mode is PermissionMode => Boolean(mode && validModes.includes(mode)),
     );
     setPermissionMode(savedMode ?? getDefaultPermissionModeForProvider(provider));
-  }, [selectedSession?.id, provider, getDefaultPermissionModeForProvider, getPermissionModesForProvider]);
+  }, [selectedSession?.id, selectedSession?.__provider, folderPermissionKey, provider, getDefaultPermissionModeForProvider, getPermissionModesForProvider]);
 
   useEffect(() => {
     if (!selectedSession?.__provider || selectedSession.__provider === provider) {
@@ -418,6 +434,15 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setProvider(selectedSession.__provider);
     writeSelectedProvider(selectedSession.__provider);
   }, [provider, selectedSession]);
+
+  // A dedicated new-chat entry can choose Claude while this component remains
+  // mounted. Existing conversations always keep their own provider identity.
+  useEffect(() => {
+    if (selectedSession?.id) return;
+    const syncNewChat = () => setProvider(readSelectedProvider());
+    syncNewChat();
+    return subscribeToUserPreferences(syncNewChat);
+  }, [selectedSession?.id]);
 
   // Permission prompts belong to a session, not to the transient provider
   // selection that is synchronized after navigation.
@@ -430,14 +455,18 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const selectPermissionMode = useCallback((nextMode: PermissionMode) => {
     setPermissionMode(nextMode);
 
-    // Persist per provider as well as per session: a brand-new chat has no
-    // session id yet, and the per-provider key keeps the choice sticky when
-    // the real id arrives (and for future sessions of this provider).
-    localStorage.setItem(`permissionMode-last-${provider}`, nextMode);
+    // Claude keeps non-Plan choices per folder; other providers retain their
+    // original defaults. The ref carries a new chat's Plan choice into its id.
+    if (provider === 'claude') {
+      if (folderPermissionKey && nextMode !== 'plan') localStorage.setItem(folderPermissionKey, nextMode);
+      if (!selectedSession?.id) newChatPermissionRef.current = {folder:folderPermissionKey,mode:nextMode};
+    } else {
+      localStorage.setItem(`permissionMode-last-${provider}`, nextMode);
+    }
     if (selectedSession?.id) {
       localStorage.setItem(`permissionMode-${selectedSession.id}`, nextMode);
     }
-  }, [provider, selectedSession?.id]);
+  }, [provider, selectedSession?.id, folderPermissionKey]);
 
   const cyclePermissionMode = useCallback(() => {
     const modes = getPermissionModesForProvider(provider);

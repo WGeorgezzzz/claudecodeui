@@ -232,6 +232,7 @@ type SpawnCall = { shell: string; args: string[]; command: string; env: Record<s
 
 function spawnRecorder(resumeSessionId: string | null = null) {
   const calls: SpawnCall[] = [];
+  const ptys: ReturnType<typeof createFakePty>[] = [];
   const dependencies = {
     resolveProviderSessionId: () => resumeSessionId,
     spawnPty: (shell: string, args: string | string[], options?: { env?: Record<string, string | undefined> }) => {
@@ -241,10 +242,12 @@ function spawnRecorder(resumeSessionId: string | null = null) {
         command: Array.isArray(args) ? args[args.length - 1] : args,
         env: options?.env ?? {},
       });
-      return createFakePty() as never;
+      const pty = createFakePty();
+      ptys.push(pty);
+      return pty as never;
     },
   };
-  return { calls, dependencies };
+  return { calls, dependencies, ptys };
 }
 
 let launchCount = 0;
@@ -745,4 +748,29 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
       ['0;15', '0;15', '0;15', '15;0']
     );
   });
+});
+
+
+test('an empty plain terminal starts an interactive shell instead of exiting', () => {
+  const {calls,dependencies,ptys}=spawnRecorder();
+  const socket=launch(dependencies,{provider:'plain-shell',isPlainShell:true,initialCommand:null});
+  assert.deepEqual(calls[0].args,os.platform()==='win32'?['-NoLogo','-NoExit']:['-i']);
+  socket.emit('close');
+  ptys[0].emitExit();
+});
+
+
+test('terminal input typed before initialization is retained in order', () => {
+  const socket=createFakeSocket(), pty=createFakePty(), writes:string[]=[];
+  pty.write=(data?:string)=>{writes.push(data||'');};
+  handleShellConnection(socket as never,{resolveProviderSessionId:()=>null,spawnPty:()=>pty as never});
+  socket.emit('message',JSON.stringify({type:'input',data:'first '}));
+  socket.emit('message',JSON.stringify({type:'init',projectPath:process.cwd(),sessionId:'early-input-test',provider:'plain-shell',isPlainShell:true}));
+  socket.emit('message',JSON.stringify({type:'input',data:'second\r'}));
+  assert.deepEqual(writes,[]);
+  pty.emitData('PS> ');
+  assert.deepEqual(writes,['first second\r']);
+  socket.emit('message',JSON.stringify({type:'input',data:'next\r'}));
+  assert.deepEqual(writes,['first second\r','next\r']);
+  pty.emitExit();
 });

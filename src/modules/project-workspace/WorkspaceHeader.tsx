@@ -10,6 +10,7 @@ import WorkspaceTabs from '@/modules/project-workspace/WorkspaceTabs';
 import WorkspaceTitle from '@/modules/project-workspace/WorkspaceTitle';
 
 type WorkspaceHeaderProps = {
+  claudeLayout?: boolean;
   activeTab: AppTab;
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   selectedProject: Project;
@@ -24,6 +25,7 @@ type WorkspaceHeaderProps = {
 
 /** Rendered by WorkspaceMain to show the workspace title and chat connection status alongside the scrollable tab bar. */
 export default function WorkspaceHeader({
+  claudeLayout = false,
   activeTab,
   setActiveTab,
   selectedProject,
@@ -124,6 +126,7 @@ export default function WorkspaceHeader({
               )}
             >
               <WorkspaceTabs
+              claudeLayout={claudeLayout}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
                 shouldShowTasksTab={shouldShowTasksTab}

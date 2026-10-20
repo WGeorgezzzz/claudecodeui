@@ -1,9 +1,14 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import { usePaletteOps } from '@/modules/command-palette';
+import { useSelectedProvider } from '@/shared/hooks/useSelectedProvider';
 
 type GitDiffViewerProps = {
   diff: string | null;
   isMobile: boolean;
   wrapText: boolean;
+  filePath?: string;
 };
 
 const PREVIEW_CHARACTER_LIMIT = 200_000;
@@ -29,10 +34,27 @@ function buildDiffPreview(diff: string): DiffPreview {
 }
 
 /** Rendered by the git panel's changes, compare and history views to display one file's diff. */
-export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewerProps) {
+export default function GitDiffViewer({ diff, isMobile, wrapText, filePath }: GitDiffViewerProps) {
+  const { t } = useTranslation('chat');
+  const provider = useSelectedProvider();
+  const { insertComposerText } = usePaletteOps();
+  // Holds only the currently edited line comment; saving appends it to the persistent chat draft.
+  const [comment, setComment] = useState<{line:number; side:string; code:string; text:string; revision:string | null} | null>(null);
   // Render a bounded preview to keep huge commit diffs from freezing the UI thread.
   const preview = useMemo(() => buildDiffPreview(diff || ''), [diff]);
   const isPreviewTruncated = preview.isCharacterTruncated || preview.isLineTruncated;
+  const anchors = useMemo(() => {
+    let oldLine = 0, newLine = 0, inHunk = false;
+    return preview.lines.map(line => {
+      const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+      if (hunk) { oldLine=Number(hunk[1]);newLine=Number(hunk[2]);inHunk=true;return null; }
+      if (!inHunk || line.startsWith('\\') || !/^[ +\-]/.test(line)) return null;
+      if (line.startsWith('-')) return {line:oldLine++,side:'original',text:line.slice(1)};
+      if (line.startsWith('+')) return {line:newLine++,side:'updated',text:line.slice(1)};
+      oldLine++;
+      return {line:newLine++,side:'updated',text:line.slice(1)};
+    });
+  }, [preview.lines]);
 
   if (!diff) {
     return (
@@ -57,7 +79,11 @@ export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewe
                 'text-muted-foreground/70'
           }`}
       >
-        {line}
+        {filePath && provider === 'claude' && anchors[index] ? (
+          <button type="button" className="block w-full text-left hover:underline" disabled={Boolean(comment)}
+            aria-label={t('desktop.commentLine', {defaultValue:'Comment on {{file}} line {{line}} ({{side}})',file:filePath,line:anchors[index].line,side:anchors[index].side})}
+            onClick={() => setComment({line:anchors[index]!.line,side:anchors[index]!.side,code:anchors[index]!.text,text:'',revision:diff})}>{line}</button>
+        ) : line}
       </div>
     );
   };
@@ -70,6 +96,22 @@ export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewe
         </div>
       )}
       {preview.lines.map((line, index) => renderDiffLine(line, index))}
+      {provider === 'claude' && comment && filePath && (
+        <div className="space-y-2 border-t border-border bg-background p-3" role="group" aria-label={t('desktop.reviewComment','Review comment')}>
+          <p className="text-xs text-muted-foreground">{filePath}:{comment.line} ({comment.side})</p>
+          {comment.revision !== diff && <p className="text-xs text-amber-600" role="status">{t('desktop.diffChanged','The diff changed. Copy your comment, cancel, and select the current line again.')}</p>}
+          <textarea autoFocus rows={3} className="w-full rounded border border-border bg-background p-2 text-sm"
+            aria-label={t('desktop.reviewComment','Review comment')} value={comment.text}
+            onChange={event => setComment({...comment,text:event.target.value})} />
+          <div className="flex gap-2">
+            <button type="button" className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50" disabled={!comment.text.trim() || comment.revision !== diff} onClick={() => {
+              insertComposerText(`Review feedback for ${filePath}:${comment.line} (${comment.side} side of the displayed diff):\nCode: ${comment.code}\n${comment.text.trim()}\n`);
+              setComment(null);
+            }}>{t('desktop.addReviewToDraft','Add to Claude draft')}</button>
+            <button type="button" className="rounded px-3 py-1.5 text-xs hover:bg-muted" onClick={() => setComment(null)}>{t('desktop.cancelComment','Cancel')}</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

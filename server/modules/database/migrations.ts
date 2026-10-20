@@ -1,4 +1,5 @@
 import { Database } from 'better-sqlite3';
+import { initializeMonitorTables } from '@/modules/database/repositories/monitors.db.js';
 
 import {
   APP_CONFIG_TABLE_SCHEMA_SQL,
@@ -399,6 +400,10 @@ const addProviderSessionIdMapping = (db: Database): void => {
   const sessionsTableInfo = getTableInfo(db, 'sessions');
   const columnNames = sessionsTableInfo.map((column) => column.name);
 
+  // Backfill only on the legacy schema upgrade. A current app-created session
+  // deliberately has no provider id until its first turn; a restart must not
+  // manufacture a non-existent Claude transcript for a delayed monitor.
+  if (columnNames.includes('provider_session_id')) return;
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'provider_session_id', 'TEXT');
   db.exec(`
     UPDATE sessions
@@ -535,6 +540,7 @@ export const runMigrations = (db: Database) => {
     addForkedFromSessionIdColumn(db);
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
+    initializeMonitorTables(db);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_provider_session_id ON sessions(provider_session_id)');

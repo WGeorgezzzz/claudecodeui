@@ -7,11 +7,11 @@ import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { clearQueuedMessage, readQueuedMessage } from '@/shared/chatDrafts';
 import type * as ChatDrafts from '@/shared/chatDrafts';
-import type { BackgroundSendChoice, PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
+import type { BackgroundSendChoice, LLMProvider, PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
 
 /**
  * A session whose turn has ended with background work still running keeps
- * its composer usable — but a new turn replaces the CLI process that work
+ * its composer usable. Claude now reuses its process; for other providers a new turn replaces the process that work
  * runs under, so the work is stopped or finishes where nothing listens. The
  * composer says so and asks before sending: send anyway, queue the message
  * until the work finishes (the server holds it while the work runs), or
@@ -52,14 +52,14 @@ const backgroundOnly: SessionActivityMap = new Map([[
 
 const uploads = () => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/assets/files'));
 
-const render = (processingSessions: SessionActivityMap) => {
+const render = (processingSessions: SessionActivityMap, provider: LLMProvider = 'cursor') => {
   const sent: Array<{ type: string }> = [];
   const view = renderHook(() =>
     useChatComposerState({
       selectedProject: PROJECT,
       selectedSession: SESSION,
       currentSessionId: SESSION.id,
-      provider: 'claude',
+      provider,
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
       resolvePermissionModeForProvider: () => 'default' as PermissionMode,
@@ -211,4 +211,15 @@ test('a session with nothing in the background sends without asking', async () =
 
   assert.equal(view.result.current.backgroundSendPrompt, null);
   assert.equal(sends().length, 1);
+});
+
+
+test('Claude sends directly while its background tasks continue', async () => {
+  const { view, sends } = render(backgroundOnly, 'claude');
+  await act(async () => { view.result.current.setInput('Continue without stopping the job'); });
+  await act(async () => { await startSubmit(view); });
+  assert.equal(view.result.current.backgroundSendPrompt, null);
+  assert.equal(sends().length, 1);
+  assert.equal(writeQueuedMessage.mock.calls.length, 0);
+  assert.equal(view.result.current.input, '');
 });

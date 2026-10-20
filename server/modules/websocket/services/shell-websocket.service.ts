@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
+import { getClaudeConfigDir } from '@/shared/index.js';
 
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
@@ -350,7 +351,7 @@ function readClaudeThemeFile(filePath: string, maxBytes: number): string | null 
  */
 function resolveClaudeTheme(projectPath: string): string {
   const configDirOverride = process.env.CLAUDE_CONFIG_DIR;
-  const configHome = configDirOverride || path.join(os.homedir(), '.claude');
+  const configHome = configDirOverride || getClaudeConfigDir();
   const legacyGlobalConfigPath = path.join(configHome, '.config.json');
   const configFiles: Array<[string, number]> = [
     [path.join(projectPath, '.claude', 'settings.local.json'), MAX_CLAUDE_SETTINGS_FILE_BYTES],
@@ -534,6 +535,15 @@ export function handleShellConnection(
   console.log('[INFO] Shell websocket connected');
 
   let shellProcess: IPty | null = null;
+  let inputReady = false;
+  let pendingInput = '';
+  const flushInput = () => {
+    inputReady = true;
+    if (shellProcess && pendingInput) {
+      shellProcess.write(pendingInput);
+      pendingInput = '';
+    }
+  };
   let ptySessionKey: string | null = null;
   let urlDetectionBuffer = '';
   const announcedAuthUrls = new Set<string>();
@@ -546,6 +556,7 @@ export function handleShellConnection(
       }
 
       if (data.type === 'init') {
+        inputReady = false;
         const projectPath = readString(data.projectPath, process.cwd());
         const sessionId = readString(data.sessionId) || null;
         const hasSession = readBoolean(data.hasSession);
@@ -588,6 +599,7 @@ export function handleShellConnection(
           isLoginCommand || forceRestart ? null : ptySessionsMap.get(ptySessionKey);
         if (existingSession) {
           shellProcess = existingSession.pty;
+          flushInput();
           if (existingSession.timeoutId) {
             clearTimeout(existingSession.timeoutId);
             existingSession.timeoutId = null;
@@ -641,8 +653,11 @@ export function handleShellConnection(
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const claudeColorScheme = claudeFollowsAppTheme ? colorScheme : null;
         const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
-        const shellArgs =
-          os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
+        // A terminal without an initial command needs an interactive shell;
+        // `powershell -Command ''` / `bash -c ''` otherwise exits immediately.
+        const shellArgs = shellCommand.trim()
+          ? os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand]
+          : os.platform() === 'win32' ? ['-NoLogo', '-NoExit'] : ['-i'];
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
         const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
@@ -676,6 +691,9 @@ export function handleShellConnection(
         });
 
         shellProcess.onData((chunk) => {
+          // Retain fast typing/paste while the shell starts, instead of losing
+          // the first characters before the first prompt becomes ready.
+          if (!inputReady) flushInput();
           if (!ptySessionKey) {
             return;
           }
@@ -802,12 +820,18 @@ export function handleShellConnection(
           })
         );
         sendClaudeColorScheme(ws, claudeColorScheme);
+        if (shellCommand.trim()) flushInput();
         return;
       }
 
       if (data.type === 'input') {
-        if (shellProcess) {
-          shellProcess.write(readString(data.data));
+        const input = readString(data.data);
+        if (shellProcess && inputReady) {
+          shellProcess.write(input);
+        } else if (pendingInput.length + input.length <= 1024 * 1024) {
+          pendingInput += input;
+        } else {
+          throw new Error('Terminal is not ready; queued input is too large. Retry after it connects.');
         }
         return;
       }
@@ -818,6 +842,7 @@ export function handleShellConnection(
         }
       }
     } catch (error) {
+      pendingInput = '';
       const message = error instanceof Error ? error.message : String(error);
       console.error('[ERROR] Shell WebSocket error:', message);
       if (ws.readyState === WebSocket.OPEN) {
@@ -832,6 +857,7 @@ export function handleShellConnection(
   });
 
   ws.on('close', () => {
+    pendingInput = '';
     if (!ptySessionKey) {
       return;
     }

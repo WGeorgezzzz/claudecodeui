@@ -1,5 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
+import { getClaudeConfigFile } from '@/shared/index.js';
 
 import { McpProvider } from '@/modules/providers/shared/mcp/mcp.provider.js';
 import type { McpScope, ProviderMcpServer, UpsertProviderMcpServerInput } from '@/shared/types.js';
@@ -25,7 +26,7 @@ export class ClaudeMcpProvider extends McpProvider {
       return readObjectRecord(config.mcpServers) ?? {};
     }
 
-    const filePath = path.join(os.homedir(), '.claude.json');
+    const filePath = getClaudeConfigFile();
     const config = await readJsonConfig(filePath);
     if (scope === 'user') {
       return readObjectRecord(config.mcpServers) ?? {};
@@ -49,7 +50,7 @@ export class ClaudeMcpProvider extends McpProvider {
       return;
     }
 
-    const filePath = path.join(os.homedir(), '.claude.json');
+    const filePath = getClaudeConfigFile();
     const config = await readJsonConfig(filePath);
     if (scope === 'user') {
       config.mcpServers = servers;

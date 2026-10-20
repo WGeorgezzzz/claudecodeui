@@ -320,6 +320,7 @@ export function useChatRealtimeHandlers({
             if (!previousPendingPermissionRequests.some((request) => request.requestId === msg.requestId)) {
               const nextPendingPermissionRequests = [...previousPendingPermissionRequests, {
                 requestId: msg.requestId as string,
+                toolId: typeof msg.toolId === 'string' ? msg.toolId : undefined,
                 toolName: (msg.toolName as string) || 'UnknownTool',
                 input: msg.input,
                 context: msg.context,

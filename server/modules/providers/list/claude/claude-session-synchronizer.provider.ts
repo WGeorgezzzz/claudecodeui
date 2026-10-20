@@ -1,6 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { getClaudeConfigDir } from '@/shared/index.js';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
@@ -23,7 +24,7 @@ type ParsedSession = {
  */
 export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'claude' as const;
-  private readonly claudeHome = path.join(os.homedir(), '.claude');
+  private readonly claudeHome = getClaudeConfigDir();
 
   /**
    * Returns true when a JSONL file is a subagent transcript or tool result

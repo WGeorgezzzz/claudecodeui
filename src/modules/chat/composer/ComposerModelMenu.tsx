@@ -16,6 +16,7 @@ import {
 type EffortOption = NonNullable<ProviderModelOption['effort']>['values'][number];
 
 type ComposerModelMenuProps = {
+  providerLabel?: string;
   effort: string;
   /** Effort values the active provider/model actually accepts; empty hides the section. */
   effortOptions: EffortOption[];
@@ -32,6 +33,7 @@ type ComposerModelMenuProps = {
  * provider's model and reasoning effort for the next turn.
  */
 function ComposerModelMenu({
+  providerLabel,
   effort,
   effortOptions,
   onSelectEffort,
@@ -42,7 +44,8 @@ function ComposerModelMenu({
 }: ComposerModelMenuProps) {
   const { t } = useTranslation('chat');
   const [isOpen, setIsOpen] = useState(false);
-  const [isModelSectionOpen, setIsModelSectionOpen] = useState(false);
+  const isClaude = providerLabel === 'Claude';
+  const [isModelSectionOpen, setIsModelSectionOpen] = useState(isClaude);
   const close = useCallback(() => setIsOpen(false), []);
   const { triggerRef, menuRef, anchor, updateAnchor } = useComposerMenuAnchor(isOpen, close);
 
@@ -50,9 +53,9 @@ function ComposerModelMenu({
   // shows reasoning first and keeps the longer model list one click away.
   useEffect(() => {
     if (!isOpen) {
-      setIsModelSectionOpen(false);
+      setIsModelSectionOpen(isClaude);
     }
-  }, [isOpen]);
+  }, [isOpen, isClaude]);
 
   const defaultEffortLabel = t('composer.effortDefault', { defaultValue: 'Default' });
   const resolvedEffortOptions = useMemo<EffortOption[]>(

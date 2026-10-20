@@ -188,10 +188,10 @@ export default function ProviderSelectionEmptyState({
         <div className="w-full max-w-[34.25rem]">
           <div className="mb-8 text-center">
             <h2 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-              {t("providerSelection.title")}
+              {provider === 'claude' ? t('providerSelection.claudeTitle', 'What would you like to work on?') : t("providerSelection.title")}
             </h2>
             <p className="mt-1 text-[13px] text-muted-foreground">
-              {t("providerSelection.description")}
+              {provider === 'claude' ? t('providerSelection.claudeDescription', 'Ask Claude to explore your project, make a change, or help with a task.') : t("providerSelection.description")}
             </p>
           </div>
 

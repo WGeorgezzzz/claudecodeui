@@ -448,6 +448,8 @@ export type PermissionGrantResult = {
 /** A tool-permission request awaiting the user's decision, identified by its requestId and carrying the tool name, input and context needed to render the prompt and reply to the backend. */
 export type PendingPermissionRequest = {
   requestId: string;
+  /** The exact tool call this decision belongs to, so old plan cards cannot approve a newer plan. */
+  toolId?: string;
   toolName: string;
   input?: unknown;
   context?: unknown;

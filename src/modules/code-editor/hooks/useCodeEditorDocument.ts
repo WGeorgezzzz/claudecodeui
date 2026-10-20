@@ -142,7 +142,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         throw new Error('Missing project identifier');
       }
 
-      const response = await api.saveFile(fileProjectId, filePath, content);
+      const response = await api.saveFile(fileProjectId, filePath, content, savedContent);
 
       if (!response.ok) {
         const contentType = response.headers.get('content-type');
@@ -180,7 +180,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         setSaving(false);
       }
     }
-  }, [content, filePath, fileProjectId, previewKind, fileName]);
+  }, [content, savedContent, filePath, fileProjectId, previewKind, fileName]);
 
   const handleDownload = useCallback(() => {
     const blob = new Blob([content], { type: 'text/plain' });

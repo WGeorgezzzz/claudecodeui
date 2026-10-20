@@ -1,6 +1,7 @@
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { createMonitorQuery } from '@/modules/monitors/index.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type {
   AnyRecord,
@@ -69,7 +70,16 @@ export function createProviderRuntimeService(
     writer: ProviderRuntimeWriter,
   ): Promise<unknown> => {
     const provider = dependencies.resolveProvider(providerName);
-    return provider.runtime.run(command, options, writer, createRuntimeContext(provider));
+    const context=createRuntimeContext(provider);
+    const userId=Number(writer.userId);
+    if(providerName==='claude'&&writer.userId!=null&&Number.isInteger(userId)&&typeof options.sessionId==='string') {
+      context.createQuery=createMonitorQuery({userId,sessionId:options.sessionId,
+        monitorId:typeof options.cloudcliMonitorId==='string'?options.cloudcliMonitorId:undefined,
+        model:typeof options.model==='string'?options.model:undefined,
+        effort:typeof options.effort==='string'?options.effort:undefined,
+        permissionMode:typeof options.permissionMode==='string'?options.permissionMode:undefined});
+    }
+    return provider.runtime.run(command, options, writer, context);
   };
 
   return {

@@ -97,6 +97,8 @@ function ComposerPermissionMenu({
   }
 
   const activeAppearance = getAppearance(permissionMode);
+  const isClaude = providerLabel === 'Claude';
+  const modeNamespace = isClaude ? 'claudeModes' : 'codex';
   const ActiveIcon = activeAppearance.icon;
   const heading = t('composer.permissionHeading', {
     provider: providerLabel,
@@ -112,13 +114,14 @@ function ComposerPermissionMenu({
           updateAnchor();
           setIsOpen((current) => !current);
         }}
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors ${activeAppearance.trigger}`}
+        className={`flex h-8 shrink-0 items-center justify-center rounded-lg border transition-colors ${isClaude ? 'max-w-40 gap-1.5 px-2 text-xs' : 'w-8'} ${activeAppearance.trigger}`}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-label={heading}
-        title={t('input.clickToChangeMode')}
+        title={isClaude ? t('input.claudeChangeMode', 'Change permissions (Shift+Tab)') : t('input.clickToChangeMode')}
       >
         <ActiveIcon className="h-4 w-4" />
+        {isClaude && <span className="truncate">{t(`claudeModes.modes.${permissionMode}`, {defaultValue:permissionMode})}</span>}
       </button>
 
       {isOpen && anchor && createPortal(
@@ -131,8 +134,8 @@ function ComposerPermissionMenu({
               <ComposerMenuItem
                 key={mode}
                 icon={<ModeIcon className="h-4 w-4" />}
-                label={t(`codex.modes.${mode}`, { defaultValue: mode })}
-                description={t(`codex.descriptions.${mode}`, { defaultValue: '' }) || undefined}
+                label={t(`${modeNamespace}.modes.${mode}`, { defaultValue: mode })}
+                description={t(`${modeNamespace}.descriptions.${mode}`, { defaultValue: '' }) || undefined}
                 isSelected={mode === permissionMode}
                 onSelect={() => {
                   onSelectPermissionMode(mode);

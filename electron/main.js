@@ -555,7 +555,13 @@ async function openLocalInDesktop() {
   const pendingTarget = localServer.getPendingTarget();
   tabs.upsertTarget(pendingTarget);
   setActiveTarget(pendingTarget);
-  await desktopWindow.showLocalStartupTarget(pendingTarget, localServer.getStartupLogs());
+  try {
+    await desktopWindow.showLocalStartupTarget(pendingTarget, localServer.getStartupLogs());
+  } catch (error) {
+    // State updates can replace the startup placeholder while it is loading.
+    // That navigation cancellation must not stop local-server connection.
+    if (!isExpectedNavigationAbort(error)) throw error;
+  }
   desktopWindow.emitDesktopState();
 
   const target = await localServer.getResolvedTarget();
@@ -869,6 +875,9 @@ function registerSingleInstance() {
   }
 
   app.on('second-instance', (_event, argv) => {
+    if (argv.includes('--local') && localServer && desktopWindow) {
+      void openLocalInDesktop().catch((error) => showError('本地 CloudCLI 启动失败', error));
+    }
     const deepLink = argv.find((arg) => arg.startsWith(`${CALLBACK_PROTOCOL}://`));
     if (deepLink) {
       void handleDeepLink(deepLink);
@@ -933,6 +942,10 @@ async function bootstrap() {
   registerIpcHandlers();
   registerAppEvents();
   await createDesktopWindow();
+  if (process.argv.includes('--local')) {
+    // Show the window immediately and let the local tab display startup progress/errors.
+    void openLocalInDesktop().catch((error) => showError('本地 CloudCLI 启动失败', error));
+  }
   void refreshCloudEnvironments({ showErrors: false });
 }
 

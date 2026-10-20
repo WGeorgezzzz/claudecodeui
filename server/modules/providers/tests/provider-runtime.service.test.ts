@@ -136,3 +136,13 @@ test('routes permission decisions through provider-owned runtime capabilities', 
     { requestId: 'request-1', sessionId: 'session-1' },
   ]);
 });
+
+test('only authenticated Claude sessions receive the monitor query factory', async () => {
+  const seen: boolean[]=[];
+  const runtime=createRuntime({async run(_command,_options,_writer,context){seen.push(typeof context.createQuery==='function');}});
+  const service=createService([createProvider('claude',runtime),createProvider('codex',runtime)]);
+  await service.run('claude','hello',{sessionId:'a'},{send(){},userId:1});
+  await service.run('claude','hello',{sessionId:'a'},{send(){}});
+  await service.run('codex','hello',{sessionId:'a'},{send(){},userId:1});
+  assert.deepEqual(seen,[true,false,false]);
+});

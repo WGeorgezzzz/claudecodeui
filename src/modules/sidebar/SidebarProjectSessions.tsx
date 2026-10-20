@@ -1,4 +1,5 @@
 import { CheckSquare, Plus, Trash2 } from 'lucide-react';
+import { Fragment } from 'react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
@@ -98,6 +99,9 @@ export default function SidebarProjectSessions({
   }
 
   const hasSessions = sessions.length > 0;
+  const claudeSessions = sessions.filter(session => session.__provider === 'claude');
+  const otherSessions = sessions.filter(session => session.__provider !== 'claude');
+  const orderedSessions = [...claudeSessions, ...otherSessions];
   const isSelecting = selectedSessionIds !== null;
   // A session with a response in flight cannot be deleted — the same rule the
   // row's options menu applies — so it is not selectable either.
@@ -218,7 +222,13 @@ export default function SidebarProjectSessions({
         </div>
       ) : (
         <>
-          {sessions.map((session) => (
+          {orderedSessions.map((session, index) => (
+            <Fragment key={session.id}>
+            {(index === 0 || index === claudeSessions.length) && (
+              <h3 className="px-2 pb-1 pt-3 text-[11px] font-semibold text-muted-foreground" data-provider-group={session.__provider === 'claude' ? 'claude' : 'other'}>
+                {session.__provider === 'claude' ? 'Claude' : t('sessions.otherProviders', 'Other chats')}
+              </h3>
+            )}
             <SidebarSessionItem
               key={session.id}
               project={project}
@@ -243,6 +253,7 @@ export default function SidebarProjectSessions({
               onToggleSessionSelected={onToggleSessionSelected}
               t={t}
             />
+            </Fragment>
           ))}
 
           {hasMoreSessions && (

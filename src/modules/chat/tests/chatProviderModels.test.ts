@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import { resetUserPreferences, writeUserPreference } from '@/shared/userSettings';
+import type { Project, ProjectSession } from '@/shared/types';
 
 /**
  * The four per-provider default models used to be four useState slots with four
@@ -39,12 +40,12 @@ vi.mock('@/shared/api', () => ({
   },
 }));
 
-const renderProviderState = async () => {
+const renderProviderState = async (selectedSession: ProjectSession | null = null, selectedProject: Project | null = null) => {
   const { useChatProviderState } = await import(
     '@/modules/chat/hooks/useChatProviderState'
   );
   return renderHook(() =>
-    useChatProviderState({ selectedSession: null, selectedProject: null }),
+    useChatProviderState({ selectedSession, selectedProject }),
   );
 };
 
@@ -145,4 +146,19 @@ test('the active provider’s model is what currentProviderModel reports', async
     assert.equal(result.current.provider, 'cursor');
   });
   assert.equal(result.current.currentProviderModel, 'cursor-active');
+});
+
+
+test('Claude remembers permissions per folder and Plan never becomes the folder default', async () => {
+  const project: Project={projectId:'folder-a',displayName:'A',fullPath:'/folder-a'};
+  const a=await renderProviderState({id:'session-a',__provider:'claude'},project);
+  await act(async()=>{a.result.current.selectPermissionMode('acceptEdits');});
+  await act(async()=>{a.result.current.selectPermissionMode('plan');});
+  assert.equal(localStorage.getItem('permissionMode-session-a'),'plan');
+  a.unmount();
+  const b=await renderProviderState(null,project);
+  await waitFor(()=>assert.equal(b.result.current.permissionMode,'acceptEdits'));
+  b.unmount();
+  const c=await renderProviderState(null,{...project,projectId:'folder-b',fullPath:'/folder-b'});
+  await waitFor(()=>assert.equal(c.result.current.permissionMode,'default'));
 });

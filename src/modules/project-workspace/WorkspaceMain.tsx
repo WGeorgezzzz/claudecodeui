@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, type Dispatch, type SetStateAction, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { ChatInterface } from '@/modules/chat';
 import { FileTree } from '@/modules/file-tree';
@@ -9,12 +10,14 @@ import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { TaskMasterPanel, useTaskMasterProjectSync, useTasksSettings } from '@/modules/task-master';
 import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
-import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
+import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
+import { useSelectedProvider } from '@/shared/hooks/useSelectedProvider';
 import { useFileOpenResolver } from '@/modules/project-workspace/hooks/useFileOpenResolver';
 import { EditorSidebar, useEditorSidebar } from '@/modules/code-editor';
 import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
 import WorkspaceStateView from '@/modules/project-workspace/WorkspaceStateView';
 import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
+import { useWorkspaceSplit } from '@/modules/project-workspace/hooks/useWorkspaceSplit';
 
 type WorkspaceMainProps = {
   selectedProject: Project | null;
@@ -59,8 +62,20 @@ function WorkspaceMain({
   onProjectsRefresh,
   onRenameSession,
 }: WorkspaceMainProps) {
+  const { t } = useTranslation('chat');
+  const selectedProvider = useSelectedProvider();
+  const isClaude = (selectedSession?.__provider ?? selectedSession?.provider ?? selectedProvider) === 'claude';
   const preferences = useUiPreferences();
+  const setPreference = useSetUiPreference();
   const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
+  // Retains the user's choice of a side-by-side Claude workspace across reloads.
+  const [splitEnabled, setSplitEnabled] = useState(() => localStorage.getItem('claude-workspace-split') !== 'false');
+  const workspaceSplit = useWorkspaceSplit();
+  // Keep this project's terminal mounted when the user returns to chat, preserving its shell.
+  const [terminalProjectId, setTerminalProjectId] = useState<string | null>(null);
+  useEffect(() => {
+    if (isClaude && activeTab === 'shell' && selectedProject) setTerminalProjectId(selectedProject.projectId);
+  }, [isClaude, activeTab, selectedProject?.projectId]);
 
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const browserUseEnabled = useBrowserUseEnabled();
@@ -88,6 +103,13 @@ function WorkspaceMain({
     selectedProject,
     isMobile,
   });
+  const splitPane = isClaude && !isMobile && splitEnabled && !editingFile && !editorExpanded
+    && ['shell', 'files', 'git', 'browser'].includes(activeTab);
+  const panelClass = splitPane ? 'h-full min-w-0 shrink-0 overflow-hidden border-l border-border' : 'h-full w-full overflow-hidden';
+  const panelStyle = splitPane ? { width: `${workspaceSplit.percent}%` } : undefined;
+  const openWorkspaceFile = useCallback((filePath: string) => {
+    if (handleFileOpen(filePath) && isClaude) setActiveTab('chat');
+  }, [handleFileOpen, isClaude, setActiveTab]);
 
   // Resolves bare/partial file references (e.g. links inside chat messages) to
   // real project files before opening them in the in-app editor.
@@ -153,14 +175,30 @@ function WorkspaceMain({
         isMobile={isMobile}
         onMenuClick={onMenuClick}
         onRenameSession={onRenameSession}
+        claudeLayout={isClaude}
       />
 
+      {isClaude && (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-4 py-2 text-xs text-muted-foreground" data-testid="claude-workspace-controls">
+          {!isMobile && <label className="flex items-center gap-1.5"><input type="checkbox" checked={splitEnabled} onChange={event => {
+            setSplitEnabled(event.target.checked);
+            localStorage.setItem('claude-workspace-split', String(event.target.checked));
+          }} />{t('desktop.sideBySide', 'Side by side')}</label>}
+          <label className="flex items-center gap-1.5"><input type="checkbox" checked={showThinking} onChange={event => setPreference('showThinking',event.target.checked)} />{t('desktop.showThinking', 'Show thinking')}</label>
+          <label className="flex items-center gap-1.5"><input type="checkbox" checked={showRawParameters} onChange={event => setPreference('showRawParameters',event.target.checked)} />{t('desktop.showParameters', 'Show tool parameters')}</label>
+          {(activeTab !== 'chat' || editingFile) && <button type="button" className="ml-auto rounded px-2 py-1 hover:bg-muted" onClick={() => {
+            if (editingFile) handleCloseEditor();
+            else setActiveTab('chat');
+          }}>{t('desktop.closePane', 'Close pane')}</button>}
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className={`flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
-          <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
+        <div ref={workspaceSplit.containerRef} className={`flex min-h-0 min-w-[200px] ${splitPane ? 'flex-row' : 'flex-col'} overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
+          <div className={`h-full min-w-0 ${splitPane ? 'flex-1' : ''} ${activeTab === 'chat' || splitPane ? 'block' : 'hidden'}`} data-testid="workspace-chat-pane">
             <WorkspaceErrorBoundary showDetails>
               <ChatInterface
-                isActive={activeTab === 'chat'}
+                isActive={activeTab === 'chat' || splitPane}
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}
                 ws={ws}
@@ -179,21 +217,26 @@ function WorkspaceMain({
             </WorkspaceErrorBoundary>
           </div>
 
+          {splitPane && <div {...workspaceSplit.separatorProps}
+            aria-label={t('desktop.resizePane', 'Resize workspace pane')}
+            className="w-1 shrink-0 cursor-col-resize touch-none bg-border hover:bg-primary focus-visible:bg-primary focus-visible:outline-none" />}
           {activeTab === 'files' && (
-            <div className="h-full overflow-hidden">
+            <div className={panelClass} style={panelStyle} data-claude-side-pane={isClaude || undefined}>
               <FileTree
                 selectedProject={selectedProject}
-                onFileOpen={handleFileOpen}
+                onFileOpen={openWorkspaceFile}
                 revealDirectory={revealDirectory}
               />
             </div>
           )}
 
-          {activeTab === 'shell' && (
-            <div className="h-full w-full overflow-hidden">
+          {(activeTab === 'shell' || (isClaude && terminalProjectId === selectedProject.projectId)) && (
+            <div className={activeTab === 'shell' ? panelClass : 'hidden'} style={panelStyle} data-claude-side-pane={isClaude || undefined}>
               <StandaloneShell
+                key={selectedProject.projectId}
                 project={selectedProject}
-                session={selectedSession}
+                session={isClaude ? null : selectedSession}
+                isPlainShell={isClaude ? true : null}
                 showHeader={false}
                 isActive={activeTab === 'shell'}
               />
@@ -201,11 +244,11 @@ function WorkspaceMain({
           )}
 
           {activeTab === 'git' && (
-            <div className="h-full overflow-hidden">
+            <div className={panelClass} style={panelStyle} data-claude-side-pane={isClaude || undefined}>
               <GitPanel
                 selectedProject={selectedProject}
                 isMobile={isMobile}
-                onFileOpen={handleFileOpen}
+                onFileOpen={openWorkspaceFile}
                 onProjectSelect={onProjectSelect}
                 onProjectsRefresh={onProjectsRefresh}
               />
@@ -215,7 +258,7 @@ function WorkspaceMain({
           {shouldShowTasksTab && <TaskMasterPanel isVisible={activeTab === 'tasks'} />}
 
           {shouldShowBrowserTab && activeTab === 'browser' && (
-            <div className="h-full overflow-hidden">
+            <div className={panelClass} style={panelStyle} data-claude-side-pane={isClaude || undefined}>
               <BrowserUsePanel isVisible={activeTab === 'browser'} onShowSettings={onShowSettings} />
             </div>
           )}

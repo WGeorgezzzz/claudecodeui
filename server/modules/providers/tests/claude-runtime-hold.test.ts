@@ -29,6 +29,8 @@ type Scripted = {
   end: () => void;
   released: () => boolean;
   stopped: string[];
+  prompts: unknown[];
+  modes: string[];
 };
 
 /** A stand-in for the SDK query: yields what the test emits, and reads the held prompt to notice its release. */
@@ -37,17 +39,26 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
   let wake: (() => void) | null = null;
   let released = false;
   const stopped: string[] = [];
+  const prompts: unknown[] = [];
+  const modes: string[] = [];
 
   const script: Scripted = {
-    emit: (message) => { queue.push(message); wake?.(); },
+    emit: (message) => {
+      if (message.type === 'result' && message.user_message_uuid === undefined) {
+        message.user_message_uuid = (prompts.at(-1) as {uuid?: string} | undefined)?.uuid;
+      }
+      queue.push(message); wake?.();
+    },
     end: () => { queue.push(null); wake?.(); },
     released: () => released,
     stopped,
+    prompts,
+    modes,
   };
 
   const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt }) => {
     void (async () => {
-      for await (const _message of prompt) { /* the CLI reads its stdin */ }
+      for await (const message of prompt) { prompts.push(message); }
       released = true;
     })();
 
@@ -68,6 +79,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
 
     return Object.assign(iterator, {
       interrupt: async () => {},
+      setPermissionMode: async (mode: string) => { modes.push(mode); },
       stopTask: async (taskId: string) => { stopped.push(taskId); },
     });
   };
@@ -76,7 +88,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
 }
 
 async function withRun(
-  runTest: (context: { script: Scripted; sent: NormalizedMessage[]; done: Promise<unknown> }) => Promise<void>,
+  runTest: (context: { script: Scripted; sent: NormalizedMessage[]; done: Promise<unknown>; continueRun: (writer: unknown, options?: Record<string, unknown>) => Promise<unknown> }) => Promise<void>,
 ): Promise<void> {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
   const { createQuery, script } = createScriptedQuery();
@@ -92,12 +104,15 @@ async function withRun(
     createQuery,
   };
 
+  const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, context);
   try {
-    const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, context);
-    await runTest({ script, sent, done });
+    await waitFor(() => script.prompts.length === 1);
+    await runTest({ script, sent, done, continueRun: (nextWriter, options = {}) => queryClaudeSDK('second prompt', { sessionId: SESSION_ID, cwd, ...options }, nextWriter as never, { ...context, createQuery: () => { throw new Error('must reuse the live query'); } }) });
     script.end();
     await done;
   } finally {
+    script.end();
+    await done;
     await rm(cwd, { recursive: true, force: true });
   }
 }
@@ -130,6 +145,42 @@ const taskNotification = (taskId: string, toolUseId: string, status: string) => 
   type: 'system', subtype: 'task_notification', session_id: NATIVE_ID, task_id: taskId, tool_use_id: toolUseId, status, summary: `Task ${taskId} ${status}`, output_file: '',
 });
 const result = () => ({ type: 'result', subtype: 'success', session_id: NATIVE_ID, result: 'launched', duration_ms: 1, num_turns: 1 });
+
+test('an immediate follow-up waits for ordinary process teardown and then resumes', async () => {
+  const first=createScriptedQuery(), second=createScriptedQuery();
+  const sent: NormalizedMessage[]=[];
+  const sessions=new ClaudeSessionsProvider({getLiveRunStartTime:()=>null});
+  let calls=0;
+  const context: ProviderRuntimeContext={
+    resolveProviderSessionId:()=>NATIVE_ID,
+    resolveResumeModel:async()=>undefined,
+    getProviderModels:async()=>CLAUDE_PREDEFINED_MODELS as never,
+    normalizeMessage:(raw,id)=>sessions.normalizeMessage(raw,id),
+    isProviderInstalled:async()=>true,
+    createQuery:args=>(++calls===1?first:second).createQuery(args),
+  };
+  const writer={send:(message:NormalizedMessage)=>sent.push(message),userId:null};
+  const options={sessionId:'ordinary-teardown-session',cwd:os.tmpdir()};
+  const initial=queryClaudeSDK('first',options,writer as never,context);
+  let followup:Promise<unknown>|undefined;
+  try {
+    await waitFor(()=>first.script.prompts.length===1);
+    first.script.emit(init());first.script.emit(result());
+    await waitFor(()=>first.script.released());
+    followup=queryClaudeSDK('second',options,writer as never,context);
+    await settle();
+    assert.equal(calls,1,'must wait for the original SDK iterator to end');
+    first.script.end();
+    await waitFor(()=>second.script.prompts.length===1);
+    second.script.emit(init());second.script.emit(result());second.script.end();
+    await followup;
+    assert.equal(sent.filter(message=>message.kind==='complete').length,2);
+    assert.equal(sent.some(message=>message.kind==='error'),false);
+  } finally {
+    first.script.end();second.script.end();
+    await initial;await followup;
+  }
+});
 
 test('stopping the last outstanding task releases the held process', async () => {
   await withRun(async ({ script, sent, done }) => {
@@ -197,105 +248,6 @@ test('an agent that ran in the foreground and settled before the result does not
   });
 });
 
-test('a new turn stops the tasks the held process still has going before letting it go', async () => {
-  // Two runs on one session, each with its own scripted CLI: the first is
-  // held for a background agent, the second is the user's next message.
-  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
-  const first = createScriptedQuery();
-  const second = createScriptedQuery();
-  const sent: NormalizedMessage[] = [];
-  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
-  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
-  const context: Omit<ProviderRuntimeContext, 'createQuery'> = {
-    resolveProviderSessionId: () => null,
-    resolveResumeModel: async () => undefined,
-    getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
-    normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
-    isProviderInstalled: async () => true,
-  };
-
-  try {
-    const firstRun = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: first.createQuery });
-    await settle();
-    first.script.emit(init());
-    first.script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
-    first.script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
-    first.script.emit(ack('toolu_agent', 'Async agent launched successfully.', { status: 'async_launched', agentId: 'a1' }));
-    first.script.emit(result());
-    await waitFor(() => sent.some((message) => message.kind === 'complete'));
-    assert.equal(first.script.released(), false, 'the first process is held for its agent');
-
-    // Closing stdin alone would leave the CLI waiting for the agent, so the
-    // superseded process would live on next to the new one for as long as
-    // the agent runs. The stop has to reach it before stdin ends, because the
-    // SDK drops control requests written to an ended stdin.
-    const secondRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: second.createQuery });
-    await settle();
-    assert.deepEqual(first.script.stopped, ['a1'], 'the held process is told to stop its agent');
-    assert.equal(first.script.released(), true, 'and is then let go');
-    assert.deepEqual(second.script.stopped, [], 'the new process is untouched');
-
-    first.script.emit(taskNotification('a1', 'toolu_agent', 'stopped'));
-    first.script.end();
-    await firstRun;
-    second.script.emit(init());
-    second.script.emit(result());
-    second.script.end();
-    await secondRun;
-    assert.deepEqual(listClaudeSDKBackgroundWork(), []);
-  } finally {
-    await rm(cwd, { recursive: true, force: true });
-  }
-});
-
-test('a held process is still let go when stopping its tasks throws', async () => {
-  // Stopping is best effort; a stop that throws on the spot must not keep the
-  // held process alive or take the new turn down with it.
-  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
-  const first = createScriptedQuery();
-  const second = createScriptedQuery();
-  const sent: NormalizedMessage[] = [];
-  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
-  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
-  const context: Omit<ProviderRuntimeContext, 'createQuery'> = {
-    resolveProviderSessionId: () => null,
-    resolveResumeModel: async () => undefined,
-    getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
-    normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
-    isProviderInstalled: async () => true,
-  };
-  const throwingStop: NonNullable<ProviderRuntimeContext['createQuery']> = (options) =>
-    Object.assign(first.createQuery(options), {
-      stopTask: () => { throw new Error('stop failed'); },
-    });
-
-  try {
-    const firstRun = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: throwingStop });
-    await settle();
-    first.script.emit(init());
-    first.script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
-    first.script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
-    first.script.emit(ack('toolu_agent', 'Async agent launched successfully.', { status: 'async_launched', agentId: 'a1' }));
-    first.script.emit(result());
-    await waitFor(() => sent.some((message) => message.kind === 'complete'));
-    assert.equal(first.script.released(), false, 'the first process is held for its agent');
-
-    const secondRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: second.createQuery });
-    await settle();
-    assert.equal(first.script.released(), true, 'the held process is let go anyway');
-
-    first.script.end();
-    await firstRun;
-    second.script.emit(init());
-    second.script.emit(result());
-    second.script.end();
-    await secondRun;
-    assert.equal(second.script.released(), true, 'the new turn ran to completion');
-  } finally {
-    await rm(cwd, { recursive: true, force: true });
-  }
-});
-
 test('a turn whose tool emits no task events still holds on the static rule', async () => {
   await withRun(async ({ script }) => {
     script.emit(init());
@@ -305,5 +257,68 @@ test('a turn whose tool emits no task events still holds on the static rule', as
     await settle();
 
     assert.equal(script.released(), false, 'Monitor reports no task, so the launch rule decides');
+  });
+});
+
+
+test('another prompt reuses the live CLI and routes its completion to the new writer', async () => {
+  await withRun(async ({script,sent,continueRun}) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_bg','Bash',{command:'long running command',run_in_background:true}));
+    script.emit(taskStarted('bg1','toolu_bg','local_bash'));
+    script.emit(result());
+    await waitFor(() => sent.some(m => m.kind === 'complete'));
+    const next: NormalizedMessage[] = [];
+    const continued = continueRun({send:(m:NormalizedMessage)=>next.push(m),userId:null},{permissionMode:'plan'});
+    await settle();
+    assert.equal(script.released(),false,'old stdin must remain open');
+    assert.deepEqual(script.stopped,[],'no stopTask is sent');
+    assert.equal(script.prompts.length,2,'new prompt reaches the same input stream');
+    assert.deepEqual(script.modes,['plan'],'permission changes apply to the existing process');
+    assert.equal(next.some(m=>m.kind==='complete'),false,'no premature completion');
+    script.emit({...result(),user_message_uuid:'unrelated-background-notification'});
+    await settle();
+    assert.equal(next.some(m=>m.kind==='complete'),false,'a background reply cannot finish the new prompt');
+    script.emit({type:'assistant',session_id:NATIVE_ID,message:{role:'assistant',content:[{type:'text',text:'second reply'}]}});
+    script.emit(result());
+    await continued;
+    assert.equal(next.filter(m=>m.kind==='complete').length,1);
+    assert.equal(sent.filter(m=>m.kind==='complete').length,1,'old writer is not reused');
+    assert.equal(script.released(),false,'background command survives both turns');
+    assert.equal(listClaudeSDKBackgroundWork()[0]?.tasks[0]?.taskId,'bg1');
+    script.emit(taskNotification('bg1','toolu_bg','completed'));
+    script.emit(result());
+    await waitFor(()=>script.released());
+  });
+});
+
+test('rewinding a live background session is rejected without stopping its work', async () => {
+  await withRun(async ({script,sent,continueRun}) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_bg','Bash',{run_in_background:true}));
+    script.emit(taskStarted('bg1','toolu_bg','local_bash'));
+    script.emit(result());
+    await waitFor(()=>sent.some(m=>m.kind==='complete'));
+    await assert.rejects(continueRun({send:()=>{},userId:null},{resumeFromScratch:true}),/background/i);
+    assert.equal(script.released(),false);
+    assert.deepEqual(script.stopped,[]);
+    assert.equal(script.prompts.length,1);
+  });
+});
+
+test('a process exit before the continued reply reports failure rather than success', async () => {
+  await withRun(async ({script,sent,continueRun}) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_bg','Bash',{run_in_background:true}));
+    script.emit(taskStarted('bg1','toolu_bg','local_bash'));
+    script.emit(result());
+    await waitFor(()=>sent.some(m=>m.kind==='complete'));
+    const next: NormalizedMessage[] = [];
+    const continued = continueRun({send:(m:NormalizedMessage)=>next.push(m),userId:null});
+    const rejected = assert.rejects(continued,/ended before/);
+    await waitFor(()=>script.prompts.length===2);
+    script.end();
+    await rejected;
+    assert.equal(next.find(m=>m.kind==='complete')?.exitCode,1);
   });
 });

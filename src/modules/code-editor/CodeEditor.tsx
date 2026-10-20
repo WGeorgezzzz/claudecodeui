@@ -48,7 +48,11 @@ export default function CodeEditor({
   const paletteOps = usePaletteOps();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDiff, setShowDiff] = useState(Boolean(file.diffInfo));
-  const [markdownPreview, setMarkdownPreview] = useState(false);
+  // Documents open rendered; code, diffs and explicit line references remain source views.
+  const [markdownPreview, setMarkdownPreview] = useState(() => /\.(md|markdown|html|htm)$/i.test(file.name) && !file.line && !file.diffInfo);
+  useEffect(() => {
+    setMarkdownPreview(/\.(md|markdown|html|htm)$/i.test(file.name) && !file.line && !file.diffInfo);
+  }, [file.path, file.line, file.diffInfo]);
 
   // The code editor follows the app-wide theme; it has no theme of its own.
   const { isDarkMode } = useTheme();
@@ -127,23 +131,7 @@ export default function CodeEditor({
     return extension === 'html' || extension === 'htm';
   }, [file.name]);
 
-  const openHtmlPreview = useCallback(() => {
-    const previewWindow = window.open('', '_blank');
-    if (!previewWindow) return;
-
-    previewWindow.opener = null;
-    previewWindow.document.title = file.name;
-    previewWindow.document.body.style.margin = '0';
-
-    const iframe = previewWindow.document.createElement('iframe');
-    iframe.title = file.name;
-    iframe.sandbox.add('allow-forms', 'allow-modals', 'allow-popups', 'allow-scripts');
-    iframe.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;background:white';
-
-    iframe.srcdoc = content;
-
-    previewWindow.document.body.appendChild(iframe);
-  }, [content, file.name]);
+  const openHtmlPreview = useCallback(() => setMarkdownPreview(previous => !previous), []);
 
   const minimapExtension = useMemo(
     () => (
@@ -314,7 +302,7 @@ export default function CodeEditor({
               pathCopied: t('actions.pathCopied', 'File path copied'),
               editMarkdown: t('actions.editMarkdown'),
               previewMarkdown: t('actions.previewMarkdown'),
-              previewHtml: t('actions.previewHtml', 'Open HTML preview in new tab'),
+              previewHtml: markdownPreview ? '查看 HTML 源码' : '预览 HTML',
               settings: t('toolbar.settings'),
               download: t('actions.download'),
               save: t('actions.save'),
@@ -334,6 +322,9 @@ export default function CodeEditor({
           )}
 
           <div className="flex-1 overflow-hidden">
+            {isHtmlPreviewFile && markdownPreview ? (
+              <iframe title={`HTML 预览：${file.name}`} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={content} className="h-full w-full border-0 bg-white" />
+            ) : (
             <CodeEditorSurface
               content={content}
               onChange={setContent}
@@ -345,6 +336,7 @@ export default function CodeEditor({
               extensions={extensions}
               gotoTarget={gotoTarget}
             />
+            )}
           </div>
 
           <CodeEditorFooter

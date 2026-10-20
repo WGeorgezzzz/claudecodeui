@@ -195,7 +195,7 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
 const READ_ONLY_ROOTS = [...new Set([
   '/tmp',
   os.tmpdir(),
-  path.join(os.homedir(), '.claude', 'projects'),
+  path.join(getClaudeConfigDir(), 'projects'),
 ])];
 
 /**
@@ -1353,4 +1353,21 @@ export function findApplicationRoot(startDirectory: string): string {
   return path.basename(parentDirectory) === 'dist-server'
     ? path.dirname(parentDirectory)
     : parentDirectory;
+}
+
+//----------------- CLAUDE CONFIGURATION PATHS ------------
+/** Used by providers, agents and session discovery. Resolves the SDK configuration
+ * root at call time so explicit CLAUDE_CONFIG_DIR overrides are honored everywhere. */
+export function getClaudeConfigDir(): string {
+  const override = process.env.CLAUDE_CONFIG_DIR?.trim();
+  return override && path.isAbsolute(override) ? override : path.join(os.homedir(), '.claude');
+}
+
+/** Used by Claude MCP discovery and runtime settings. The default CLI config is
+ * in the home directory; isolated configurations keep it inside their own root. */
+export function getClaudeConfigFile(): string {
+  const override = process.env.CLAUDE_CONFIG_DIR?.trim();
+  return override && path.isAbsolute(override)
+    ? path.join(getClaudeConfigDir(), '.claude.json')
+    : path.join(os.homedir(), '.claude.json');
 }

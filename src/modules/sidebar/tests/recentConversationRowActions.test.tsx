@@ -80,6 +80,16 @@ beforeEach(() => {
   recordedOptionsProps.length = 0;
 });
 
+test('Claude chats form a separate group without changing other providers or losing rows', () => {
+  const { container } = renderList([
+    conversation('other-new', {provider:'codex'}), conversation('claude-new'),
+    conversation('other-old', {provider:'codex'}), conversation('claude-old'),
+  ], makeActions());
+  assert.deepEqual(recordedOptionsProps.map(row=>row.sessionId), ['claude-new','claude-old','other-new','other-old']);
+  assert.equal(container.querySelectorAll('[data-provider-group="claude"]').length,1);
+  assert.equal(container.querySelectorAll('[data-provider-group="other"]').length,1);
+});
+
 test('every conversation row gets the shared session controls', () => {
   renderList([conversation('s1'), conversation('s2')], makeActions());
 

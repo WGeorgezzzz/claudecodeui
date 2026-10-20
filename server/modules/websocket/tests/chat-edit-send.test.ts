@@ -79,6 +79,7 @@ async function withGateway(
     runs: RunCall[];
   }) => Promise<void>,
   rows: unknown[] = TRANSCRIPT_ROWS,
+  backgroundWork = false,
 ): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'chat-edit-send-'));
@@ -102,6 +103,7 @@ async function withGateway(
       {
         runtime: {
           hasRuntime: () => true,
+          hasBackgroundWork: () => backgroundWork,
           run: async (runProvider: string, command: string, options: Record<string, unknown>) => {
             runs.push({ provider: runProvider, command, options });
             if (holdRun) {
@@ -131,6 +133,16 @@ async function withGateway(
 
 /** The handler is async and the socket listener does not await it. */
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 30); });
+
+test('a background session refuses edits before truncating history', async () => {
+  await withGateway('claude', async ({ socket, runs }) => {
+    socket.emit('message', JSON.stringify({type:'chat.edit-send',sessionId:SESSION_ID,anchorId:'e-u2',content:'replacement'}));
+    await settle();
+    assert.equal(runs.length, 0);
+    assert.equal(socket.frames.at(-1)?.code, 'BACKGROUND_WORK_ACTIVE');
+    assert.equal(socket.frames.some(frame => frame.kind === 'history_truncated'), false);
+  }, TRANSCRIPT_ROWS, true);
+});
 
 test('an edit resumes through the turn before the one being replaced', async () => {
   await withGateway('claude', async ({ socket, runs }) => {

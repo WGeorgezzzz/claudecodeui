@@ -158,7 +158,10 @@ export function createFileTreeRouter(
         statusCode: 400,
       });
     }
-    response.json(await services.saveTextFile(readProjectId(request), filePath, body.content));
+    if (body.expectedContent !== undefined && typeof body.expectedContent !== 'string') {
+      throw new AppError('expectedContent must be a string', {code:'INVALID_FILE_BASELINE',statusCode:400});
+    }
+    response.json(await services.saveTextFile(readProjectId(request), filePath, body.content, body.expectedContent as string | undefined));
   }, logger));
 
   router.get('/projects/:projectId/files', createRouteHandler(async (request, response) => {

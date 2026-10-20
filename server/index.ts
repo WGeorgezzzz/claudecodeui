@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 // Load environment variables before other imports execute.
+import { monitorsRoutes, initializeMonitors, closeMonitors } from '@/modules/monitors/index.js';
+
 import './load-env.js';
 import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
@@ -197,6 +199,7 @@ app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
 app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
+app.use('/api/monitors', authenticateToken, monitorsRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -372,6 +375,7 @@ async function startServer() {
             // Sends anything that came due while the server was not running,
             // then keeps polling.
             initializeScheduledMessageDispatcher(providerRuntimeService);
+            initializeMonitors(providerRuntimeService);
 
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {
@@ -381,6 +385,7 @@ async function startServer() {
 
         await closeSessionsWatcher();
         closeScheduledMessageDispatcher();
+        closeMonitors();
         // Clean up plugin processes on shutdown
         const shutdownRuntimeServices = async () => {
             try {

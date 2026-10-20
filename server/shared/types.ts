@@ -646,13 +646,13 @@ export type ProviderRuntimeContext = {
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
   isProviderInstalled(): Promise<boolean>;
   /**
-   * Builds the SDK query for a run. Production leaves this unset and the
-   * runtime uses the SDK's own; tests supply a scripted stream so the hold
-   * and background-work paths can be driven without a CLI process.
+   * Builds the SDK query for a run. Authenticated Claude turns attach
+   * session-scoped monitoring tools; tests can supply scripted streams
+   * to exercise background work without a CLI process.
    */
   createQuery?: (input: { prompt: AsyncIterable<unknown>; options: AnyRecord }) => AsyncIterable<unknown> & {
-    interrupt(): Promise<void>;
-    stopTask?(taskId: string): Promise<void>;
+    interrupt(): Promise<unknown>;
+    stopTask?(taskId: string): Promise<unknown>;
   };
 };
 
@@ -1427,7 +1427,8 @@ export type FileTreeServices = {
   createWorkspaceFolder(folderPath: string): Promise<{ success: true; path: string }>;
   readTextFile(projectId: string, filePath: string): Promise<{ content: string; path: string }>;
   openFile(projectId: string, filePath: string): Promise<{ contentType: string; stream: Readable }>;
-  saveTextFile(projectId: string, filePath: string, content: string): Promise<{
+  /** expectedContent is the exact last-read text; when supplied, reject external edits rather than overwrite them. */
+  saveTextFile(projectId: string, filePath: string, content: string, expectedContent?: string): Promise<{
     success: true;
     path: string;
     message: string;
@@ -1611,3 +1612,17 @@ export type CliApplication = {
 export type SandboxCommandService = {
   execute(argumentsList: string[]): Promise<number>;
 };
+
+//----------------- PERSISTENT MONITORS ------------
+/** Persisted monitor, shared by its repository, dispatcher and HTTP service. Times are ISO UTC instants. */
+export type MonitorRecord = {
+  id: string; user_id: number; session_id: string; name: string; content: string; options: string;
+  interval_minutes: number; status: 'active'|'paused'|'stopped'; next_run_at: string;
+  running_id: string|null; run_count: number; last_error: string|null; created_at: string;
+};
+/** One attempted monitor execution; interrupted runs require manual review instead of automatic replay. */
+export type MonitorRunRecord = {
+  id: string; monitor_id: string; started_at: string; finished_at: string|null;
+  status: 'running'|'succeeded'|'failed'|'interrupted'; error: string|null;
+};
+// ---------------------------

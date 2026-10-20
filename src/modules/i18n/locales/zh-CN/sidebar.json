@@ -38,7 +38,9 @@
     "selectAllLoaded": "全选已加载",
     "clearSelection": "清除选择",
     "deleteSelected_one": "删除 {{count}} 个会话",
-    "deleteSelected_other": "删除 {{count}} 个会话"
+    "deleteSelected_other": "删除 {{count}} 个会话",
+    "newClaude": "新建 Claude 会话",
+    "otherProviders": "其他会话"
   },
   "tooltips": {
     "viewEnvironments": "查看环境",

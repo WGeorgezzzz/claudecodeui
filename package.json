@@ -2,7 +2,7 @@
   "name": "@cloudcli-ai/cloudcli",
   "version": "1.37.5",
   "productName": "CloudCLI",
-  "description": "A web-based UI for Claude Code CLI",
+  "description": "CloudCLI fork with Codex-inspired Claude desktop workflows",
   "type": "module",
   "main": "dist-server/server/index.js",
   "bin": {
@@ -18,13 +18,13 @@
     "scripts/",
     "README.md"
   ],
-  "homepage": "https://cloudcli.ai",
+  "homepage": "https://github.com/WGeorgezzzz/claudecodeui",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/siteboon/claudecodeui.git"
+    "url": "git+https://github.com/WGeorgezzzz/claudecodeui.git"
   },
   "bugs": {
-    "url": "https://github.com/siteboon/claudecodeui/issues"
+    "url": "https://github.com/WGeorgezzzz/claudecodeui/issues"
   },
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
@@ -201,7 +201,8 @@
     "remark-math": "^6.0.0",
     "tailwind-merge": "^3.3.1",
     "web-push": "^3.6.7",
-    "ws": "^8.14.2"
+    "ws": "^8.14.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.0",

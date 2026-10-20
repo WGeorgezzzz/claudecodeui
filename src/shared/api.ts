@@ -293,6 +293,13 @@ export const api = {
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}`),
 
   // Scheduled messages: send a message to a session at a future time.
+  monitors: {
+    update: (id: string, input: {name:string;content:string;intervalMinutes:number}) => patch('/api/monitors/' + encodeURIComponent(id), input),
+    list: (sessionId?: string) => get('/api/monitors' + (sessionId ? '?sessionId=' + encodeURIComponent(sessionId) : '')),
+    create: (input: Record<string, unknown>) => post('/api/monitors', input),
+    action: (id: string, action: string) => post('/api/monitors/' + encodeURIComponent(id) + '/action', {action}),
+    runs: (id: string) => get('/api/monitors/' + encodeURIComponent(id) + '/runs'),
+  },
   scheduledMessages: {
     list: (sessionId?: string) =>
       get(`/api/scheduled-messages${sessionId ? query({ sessionId }) : ''}`),
@@ -308,8 +315,8 @@ export const api = {
   // media call sites fetch a blob through here instead of using a bare `src`.
   readFileBlob: (projectId: string, filePath: string, options: ApiRequestOptions = {}) =>
     get(fileContentPath(projectId, filePath), options),
-  saveFile: (projectId: string, filePath: string, content: string) =>
-    put(`/api/file-tree/projects/${projectId}/file`, { filePath, content }),
+  saveFile: (projectId: string, filePath: string, content: string, expectedContent?: string) =>
+    put(`/api/file-tree/projects/${projectId}/file`, { filePath, content, ...(expectedContent !== undefined ? {expectedContent} : {}) }),
   getFiles: (projectId: string, options: ApiRequestOptions = {}) =>
     get(`/api/file-tree/projects/${projectId}/files${query({ respectGitignore: true })}`, options),
 

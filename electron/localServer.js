@@ -497,10 +497,15 @@ export class LocalServerController {
   }
 
   async ensureLocalServer() {
-    if (!this.localServerUrl) {
-      this.localServerUrl = await this.resolveLocalServerUrl();
-    }
-    return this.localServerUrl;
+    if (this.startupPromise) return this.startupPromise;
+    this.startupPromise = (async () => {
+      if (!this.localServerUrl || !await isCloudCliServer(this.localServerUrl)) {
+        this.localServerUrl = await this.resolveLocalServerUrl();
+      }
+      return this.localServerUrl;
+    })();
+    try { return await this.startupPromise; }
+    finally { this.startupPromise = null; }
   }
 
   async getResolvedTarget() {

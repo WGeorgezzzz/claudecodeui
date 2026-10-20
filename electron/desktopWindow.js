@@ -744,22 +744,33 @@ export class DesktopWindowManager {
       return { action: 'deny' };
     });
 
-    this.mainWindow.on('resize', () => {
+    let layoutTimer = null;
+    const syncViewBounds = () => {
+      if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
       this.viewHost.resizeActiveView();
       this.syncSettingsWindowBounds();
-    });
+    };
+    const settledLayout = () => {
+      syncViewBounds();
+      clearTimeout(layoutTimer);
+      // Win32 maximize/restore can publish its final client size after resize.
+      layoutTimer = setTimeout(() => {
+        syncViewBounds();
+      }, 120);
+    };
+    for (const event of ['resize', 'resized', 'maximize', 'unmaximize', 'restore', 'show', 'enter-full-screen', 'leave-full-screen']) {
+      this.mainWindow.on(event, settledLayout);
+    }
 
-    // A combined move+resize (e.g. maximize, left/top edge drags on Linux) can emit 'resize'
-    // before the content area is laid out, so re-apply the view bounds once layout settles.
-    this.mainWindow.contentView.on('bounds-changed', () => {
-      this.viewHost.resizeActiveView();
-    });
+    this.mainWindow.contentView.on('bounds-changed', syncViewBounds);
 
     this.mainWindow.on('move', () => {
       this.syncSettingsWindowBounds();
+      settledLayout();
     });
 
     this.mainWindow.on('closed', () => {
+      clearTimeout(layoutTimer);
       this.viewHost.clear();
       this.settingsWindow = null;
       this.mainWindow = null;

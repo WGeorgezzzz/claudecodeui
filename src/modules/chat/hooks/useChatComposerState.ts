@@ -926,13 +926,10 @@ export function useChatComposerState({
         });
       }
 
-      // A new turn replaces the CLI process a session's background work runs
-      // under: the agents, workflows and commands it still has going are
-      // stopped, or finish where nothing is listening. Sending is the user's
-      // call, but not one to make for them — and queueing behind the work,
-      // which the server holds until it finishes, is the safe alternative.
+      // Claude submits new turns into its existing process, preserving its
+      // background tasks. Other providers retain the queue/replace choice.
       const backgroundActivity = processingSessionsRef.current?.get(targetSessionId);
-      if (backgroundActivity?.background) {
+      if (backgroundActivity?.background && provider !== 'claude') {
         const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
           .map((task) => describeBackgroundTask(task, t));
         const choice = await askBeforeSendingOverBackgroundWork(work);
@@ -1250,7 +1247,9 @@ export function useChatComposerState({
         return;
       }
 
-      if (event.key === 'Tab' && !showFileDropdown && !showCommandMenu) {
+      if (event.key === 'Tab' && (provider !== 'claude' || event.shiftKey)
+        && !event.ctrlKey && !event.metaKey && !event.altKey
+        && !showFileDropdown && !showCommandMenu) {
         event.preventDefault();
         cyclePermissionMode();
         return;
@@ -1278,6 +1277,7 @@ export function useChatComposerState({
       handleFileMentionsKeyDown,
       handleHistoryKeyDown,
       handleSubmit,
+      provider,
       sendByCtrlEnter,
       showCommandMenu,
       showFileDropdown,
